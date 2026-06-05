@@ -1,0 +1,32 @@
+node_modules/
+dist/
+dist-ssr/
+out/
+release/
+.turbo/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+.env.*.local
+coverage/
+.vite/
+.pnpm-store/
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+# OS
+*.icloud
+# Debug
+npm-debug.log*
+pnpm-debug.log*
+# Screenshots
+*.png
+*.jpg
+# Claude
+.claude/

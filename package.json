@@ -1,0 +1,23 @@
+{
+  "name": "pi-coding-agent-desktop",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev:web": "turbo run dev --filter=@pi/web",
+    "dev:desktop": "turbo run dev --filter=@pi/desktop",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "turbo": "^2.9.16",
+    "typescript": "^5.9.3"
+  }
+}

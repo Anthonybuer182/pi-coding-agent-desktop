@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/types" },
+    { "path": "packages/sdk-wrapper" },
+    { "path": "packages/ui" },
+    { "path": "apps/web" },
+    { "path": "apps/desktop" }
+  ]
+}
