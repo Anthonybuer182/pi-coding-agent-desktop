@@ -1,19 +1,18 @@
 import { ipcMain } from 'electron';
 import {
-  MockWorkspaceService,
-  MockSessionService,
-  MockChatService,
-  MockFileService,
-  MockDiffService,
-  MockConfigService,
-} from '@pi/sdk-wrapper';
+  createRealWorkspaceService,
+  createRealSessionService,
+  createRealFileService,
+  createRealDiffService,
+  createRealConfigService,
+} from '@pi/sdk-wrapper/adapters';
+import type { WorkspaceService, SessionService, FileService, DiffService, ConfigService, SendMessageParams } from '@pi/sdk-wrapper';
 
-const workspaceService = new MockWorkspaceService();
-const sessionService = new MockSessionService();
-const chatService = new MockChatService();
-const fileService = new MockFileService();
-const diffService = new MockDiffService();
-const configService = new MockConfigService();
+const workspaceService: WorkspaceService = createRealWorkspaceService();
+const sessionService: SessionService = createRealSessionService();
+const fileService: FileService = createRealFileService();
+const diffService: DiffService = createRealDiffService();
+const configService: ConfigService = createRealConfigService(process.cwd());
 
 interface SdkRequest {
   id: string;
@@ -86,14 +85,21 @@ async function handleSession(action: string, params: unknown): Promise<unknown> 
 async function handleChat(action: string, params: unknown): Promise<unknown> {
   const p = params as Record<string, unknown>;
   switch (action) {
-    case 'sendMessage': return chatService.sendMessage(p as any);
-    case 'getMessages':
-      return chatService.getMessages(
-        p.sessionId as string,
-        p.limit as number | undefined,
-        p.offset as number | undefined,
-      );
-    case 'stopGeneration': return chatService.stopGeneration(p.sessionId as string);
+    case 'sendMessage': {
+      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
+      const chatService = createRealChatService(process.cwd());
+      return chatService.sendMessage(p as unknown as SendMessageParams);
+    }
+    case 'getMessages': {
+      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
+      const chatService = createRealChatService(process.cwd());
+      return chatService.getMessages(p.sessionId as string, p.limit as number | undefined, p.offset as number | undefined);
+    }
+    case 'stopGeneration': {
+      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
+      const chatService = createRealChatService(process.cwd());
+      return chatService.stopGeneration(p.sessionId as string);
+    }
     default: throw new Error(`Unknown chat action: ${action}`);
   }
 }

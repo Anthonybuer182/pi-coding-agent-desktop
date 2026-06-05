@@ -11,6 +11,7 @@
     "start": "electron ."
   },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.78.1",
     "@pi/sdk-wrapper": "workspace:*",
     "@pi/types": "workspace:*",
     "@pi/ui": "workspace:*",

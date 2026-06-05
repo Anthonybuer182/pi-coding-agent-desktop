@@ -1,0 +1,289 @@
+import type { Session, SessionWithMessages, Message, ContentBlock, AssistantMessage } from '@pi/types';
+import type { SessionService } from '../services/session.js';
+import {
+  SessionManager,
+  type SessionMessageEntry,
+  type SessionEntry,
+  type SessionInfo,
+} from '@earendil-works/pi-coding-agent';
+import { existsSync, unlinkSync } from 'fs';
+
+function extractTitleFromMessage(msg: any): string | undefined {
+  const content = msg.content;
+  if (typeof content === 'string') {
+    return content.slice(0, 60);
+  }
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (block?.type === 'text' && block.text) {
+        return String(block.text).slice(0, 60);
+      }
+    }
+  }
+  if (content && typeof content === 'object' && (content as any).text) {
+    return String((content as any).text).slice(0, 60);
+  }
+  return undefined;
+}
+
+// === Conversion: SessionInfo → our Session type ===
+function toSession(info: SessionInfo): Session {
+  return {
+    id: info.path,
+    workspaceId: info.cwd,
+    title: info.name || info.firstMessage.slice(0, 60) || 'Untitled',
+    status: 'active',
+    messageCount: info.messageCount,
+    lastMessageAt: info.modified.toISOString(),
+    createdAt: info.created.toISOString(),
+    updatedAt: info.modified.toISOString(),
+  };
+}
+
+// === Conversion: AgentMessage → ContentBlock[] ===
+type AgentMessage = SessionMessageEntry['message'];
+
+function agentMessageToBlocks(msg: any): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+
+  if (msg.role === 'user') {
+    const content = typeof msg.content === 'string'
+      ? msg.content
+      : Array.isArray(msg.content) ? msg.content.map((c: any) => c.text || '').join('') : '';
+    blocks.push({
+      id: `b-${msg.timestamp || Date.now()}`,
+      type: 'text',
+      content,
+    });
+  } else if (msg.role === 'assistant') {
+    const content = msg.content;
+    if (Array.isArray(content)) {
+      for (let i = 0; i < content.length; i++) {
+        const block = content[i] as any;
+        if (block.type === 'text') {
+          blocks.push({
+            id: `b-text-${msg.timestamp || Date.now()}-${i}`,
+            type: 'text',
+            content: block.text || '',
+          });
+        } else if (block.type === 'toolCall' || block.type === 'tool_call') {
+          blocks.push({
+            id: `b-tool-${msg.timestamp || Date.now()}-${i}`,
+            type: 'tool_call',
+            content: `Calling ${block.name || block.toolName || 'tool'}`,
+            toolCallId: block.toolCallId || `tc-${i}`,
+            toolName: block.name || block.toolName,
+            args: block.args || block.input || {},
+          });
+        } else if (block.type === 'toolResult' || block.type === 'tool_result') {
+          const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+          blocks.push({
+            id: `b-tr-${msg.timestamp || Date.now()}-${i}`,
+            type: 'tool_result',
+            content: resultContent,
+            toolCallId: block.toolCallId || `tc-${i}`,
+            result: resultContent,
+            isError: block.isError,
+          });
+        } else if (block.type === 'thinking') {
+          blocks.push({
+            id: `b-think-${msg.timestamp || Date.now()}-${i}`,
+            type: 'thinking',
+            content: block.thinking || block.text || '',
+            thinking: block.thinking || block.text || '',
+            duration: block.duration,
+          });
+        }
+      }
+    } else if (typeof content === 'string') {
+      blocks.push({
+        id: `b-text-${msg.timestamp || Date.now()}-0`,
+        type: 'text',
+        content,
+      });
+    }
+  } else if (msg.role === 'tool_result') {
+    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+    blocks.push({
+      id: `b-tr-${msg.timestamp || Date.now()}`,
+      type: 'tool_result',
+      content,
+      toolCallId: msg.toolCallId || 'unknown',
+      result: content,
+      isError: msg.isError,
+    });
+  } else if (msg.role === 'bashExecution') {
+    blocks.push({
+      id: `b-bash-${msg.timestamp || Date.now()}`,
+      type: 'text',
+      content: `Bash: ${msg.command}\nOutput: ${msg.output}`,
+    });
+  } else if (msg.role === 'compactionSummary') {
+    blocks.push({
+      id: `b-compact-${msg.timestamp || Date.now()}`,
+      type: 'text',
+      content: msg.summary || '',
+    });
+  } else if (msg.role === 'branchSummary') {
+    blocks.push({
+      id: `b-branch-${msg.timestamp || Date.now()}`,
+      type: 'text',
+      content: msg.summary || '',
+    });
+  }
+
+  return blocks;
+}
+
+// === Conversion: AgentMessage → our Message type ===
+function toMessage(msg: any, sessionId: string, index: number): Message | null {
+  const blocks = agentMessageToBlocks(msg);
+  if (blocks.length === 0) return null;
+
+  const id = `msg-${sessionId}-${index}`;
+  const content = blocks.map((b) => b.content).join('\n\n');
+  const timestamp = msg.timestamp
+    ? new Date(msg.timestamp).toISOString()
+    : new Date().toISOString();
+
+  if (msg.role === 'user') {
+    return {
+      id,
+      sessionId,
+      role: 'user',
+      status: 'complete',
+      content,
+      blocks,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  } else if (msg.role === 'assistant') {
+    return {
+      id,
+      sessionId,
+      role: 'assistant',
+      status: 'complete',
+      modelId: msg.model || 'unknown',
+      content,
+      blocks,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      usage: msg.usage ? {
+        inputTokens: msg.usage.inputTokens || 0,
+        outputTokens: msg.usage.outputTokens || 0,
+        totalTokens: (msg.usage.inputTokens || 0) + (msg.usage.outputTokens || 0),
+      } : undefined,
+    } as AssistantMessage;
+  }
+
+  // For non-standard messages (bash, system, custom, compaction, branch)
+  return {
+    id,
+    sessionId,
+    role: 'system',
+    status: 'complete',
+    content,
+    blocks,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function isSessionMessageEntry(e: SessionEntry): e is SessionMessageEntry {
+  return e.type === 'message';
+}
+
+export function createRealSessionService(): SessionService {
+  return {
+    async list(workspaceId: string): Promise<Session[]> {
+      try {
+        const sessions = await SessionManager.list(workspaceId);
+        return sessions.map(toSession);
+      } catch {
+        return [];
+      }
+    },
+
+    async get(id: string): Promise<SessionWithMessages> {
+      let sm: SessionManager;
+      try {
+        sm = SessionManager.open(id);
+      } catch {
+        throw new Error(`Session not found: ${id}`);
+      }
+
+      const header = sm.getHeader();
+      const entries = sm.getEntries();
+      const messageEntries = entries.filter(isSessionMessageEntry);
+
+      const messages: Message[] = messageEntries
+        .map((e, i) => toMessage(e.message, id, i))
+        .filter((m): m is Message => m !== null);
+
+      const cwd = header?.cwd || sm.getCwd();
+      const sessionName = sm.getSessionName();
+      const title = (typeof sessionName === 'string' && sessionName ? sessionName : undefined)
+        || (messageEntries.length > 0 ? extractTitleFromMessage(messageEntries[0].message) : undefined)
+        || 'Untitled';
+
+      // Use header timestamp if available
+      const createdAt = header?.timestamp
+        ? new Date(header.timestamp).toISOString()
+        : new Date().toISOString();
+
+      return {
+        id,
+        workspaceId: cwd,
+        title,
+        status: 'active',
+        messageCount: messageEntries.length,
+        lastMessageAt: messages.length > 0 ? messages[messages.length - 1].createdAt : null,
+        createdAt,
+        updatedAt: messages.length > 0 ? messages[messages.length - 1].createdAt : createdAt,
+        messages,
+      };
+    },
+
+    async create(workspaceId: string, title?: string): Promise<Session> {
+      const sm = SessionManager.create(workspaceId);
+      if (title) {
+        sm.appendSessionInfo(title);
+      }
+      const file = sm.getSessionFile();
+      return {
+        id: file || `sess-${sm.getSessionId()}`,
+        workspaceId,
+        title: title ?? 'New Session',
+        status: 'active',
+        messageCount: 0,
+        lastMessageAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    },
+
+    async delete(id: string): Promise<void> {
+      if (existsSync(id)) {
+        unlinkSync(id);
+      }
+    },
+
+    async archive(id: string): Promise<Session> {
+      return this.get(id);
+    },
+
+    async unarchive(id: string): Promise<Session> {
+      return this.get(id);
+    },
+
+    async updateTitle(id: string, title: string): Promise<Session> {
+      try {
+        const sm = SessionManager.open(id);
+        sm.appendSessionInfo(title);
+        return this.get(id);
+      } catch {
+        throw new Error(`Session not found: ${id}`);
+      }
+    },
+  };
+}

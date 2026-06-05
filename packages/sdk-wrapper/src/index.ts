@@ -8,4 +8,4 @@ export * from './services/chat.js';
 export * from './services/file.js';
 export * from './services/diff.js';
 export * from './services/config.js';
-export * from './mock/index.js';
+export * from './proxy/index.js';

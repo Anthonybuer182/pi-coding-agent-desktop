@@ -13,7 +13,7 @@ import { SlashCommandMenu } from './slash-command-menu';
 import { MentionMenu } from './mention-menu';
 import type { MentionItem } from './mention-menu';
 import { AttachmentPreviewBar } from './attachment-preview-bar';
-import { MOCK_SLASH_COMMANDS } from '@pi/sdk-wrapper';
+import { DEFAULT_SLASH_COMMANDS } from '@pi/sdk-wrapper';
 
 export function Composer() {
   const sdk = useSDK();
@@ -205,7 +205,7 @@ export function Composer() {
         <div className="relative flex-1">
           {showSlashMenu && (
             <SlashCommandMenu
-              commands={MOCK_SLASH_COMMANDS}
+              commands={DEFAULT_SLASH_COMMANDS}
               query={slashQuery}
               onSelect={handleSlashSelect}
             />

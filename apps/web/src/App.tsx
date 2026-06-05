@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createMockSDKClient, MOCK_SKILLS } from '@pi/sdk-wrapper';
-import type { Config } from '@pi/types';
+import { createProxySDKClient, DEFAULT_SLASH_COMMANDS, HTTPTransport } from '@pi/sdk-wrapper';
+import type { Config, Skill } from '@pi/types';
 import {
   SDKProvider,
   useSDK,
@@ -39,6 +39,14 @@ const queryClient = new QueryClient({
   },
 });
 
+// Default skills placeholder when SDK skills can't be loaded
+const DEFAULT_SKILLS: Skill[] = [
+  { id: 'skill-filesystem', name: 'filesystem', description: 'Access and manage local files', category: 'filesystem', enabled: true },
+  { id: 'skill-officecli', name: 'officecli', description: 'Create and edit Office documents', category: 'document', enabled: true },
+  { id: 'skill-graphify', name: 'graphify', description: 'Build knowledge graphs from code', category: 'code', enabled: true },
+  { id: 'skill-ui-ux-pro-max', name: 'ui-ux-pro-max', description: 'UI/UX design intelligence', category: 'code', enabled: true },
+];
+
 function AppContent() {
   useTheme();
   const sdk = useSDK();
@@ -52,10 +60,22 @@ function AppContent() {
   const setCompactMode = useUIStore((s) => s.setCompactMode);
   const selectedSkills = useUIStore((s) => s.selectedSkills);
   const toggleSkill = useUIStore((s) => s.toggleSkill);
+  const connectionStatus = useUIStore((s) => s.connectionStatus);
+  const setConnectionStatus = useUIStore((s) => s.setConnectionStatus);
+
+  // Try to connect on mount
+  useEffect(() => {
+    sdk.connect().then(() => {
+      setConnectionStatus('connected');
+    }).catch(() => {
+      setConnectionStatus('disconnected');
+    });
+  }, [sdk, setConnectionStatus]);
 
   const { data: config } = useQuery({
     queryKey: ['config'],
     queryFn: () => sdk.config.get(),
+    enabled: connectionStatus === 'connected',
   });
 
   const updateConfigMut = useMutation({
@@ -71,7 +91,7 @@ function AppContent() {
           <WorkspaceCreateDialog />
           <div className="flex-1" />
           <ModelSelector
-            value={config?.defaultModelId}
+            value={config?.defaultModelId ?? ''}
             onChange={(modelId) => updateConfigMut.mutate({ defaultModelId: modelId })}
           />
           <ThinkLevelSelector
@@ -79,7 +99,7 @@ function AppContent() {
             onChange={(level) => updateConfigMut.mutate({ defaultThinkLevel: level })}
           />
           <CompactToggle compact={compactMode} onToggle={setCompactMode} />
-          <SkillSelector skills={MOCK_SKILLS} selectedIds={selectedSkills} onToggle={toggleSkill} />
+          <SkillSelector skills={DEFAULT_SKILLS} selectedIds={selectedSkills} onToggle={toggleSkill} />
           <div className="h-4 w-px bg-border mx-1" />
           <UsageStatistics />
         </TopControlPanel>
@@ -114,7 +134,10 @@ function AppContent() {
 }
 
 export function App() {
-  const sdkClient = useMemo(() => createMockSDKClient(), []);
+  const sdkClient = useMemo(() => {
+    const transport = new HTTPTransport('/api');
+    return createProxySDKClient({ transport });
+  }, []);
 
   return (
     <ErrorBoundary>
