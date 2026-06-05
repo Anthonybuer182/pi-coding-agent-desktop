@@ -1,13 +1,14 @@
-import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import type { SlashCommand } from '@pi/types';
 
 interface SlashCommandMenuProps {
   commands: SlashCommand[];
   query: string;
+  highlightedIndex: number;
   onSelect: (command: SlashCommand) => void;
 }
 
-export function SlashCommandMenu({ commands, query, onSelect }: SlashCommandMenuProps) {
+export function SlashCommandMenu({ commands, query, highlightedIndex, onSelect }: SlashCommandMenuProps) {
   const filtered = query
     ? commands.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
     : commands;
@@ -16,35 +17,51 @@ export function SlashCommandMenu({ commands, query, onSelect }: SlashCommandMenu
 
   const grouped = filtered.reduce(
     (acc, cmd) => {
-      if (!acc[cmd.category]) acc[cmd.category] = [];
-      acc[cmd.category].push(cmd);
+      const cat = cmd.category || 'other';
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(cmd);
       return acc;
     },
     {} as Record<string, SlashCommand[]>,
   );
 
+  let globalIndex = 0;
+  const flatItems: { cmd: SlashCommand; index: number }[] = [];
+  for (const cmds of Object.values(grouped)) {
+    for (const cmd of cmds) {
+      flatItems.push({ cmd, index: globalIndex++ });
+    }
+  }
+
   return (
-    <div className="absolute bottom-full left-0 mb-2 w-72">
-      <Command className="rounded-lg border shadow-md">
-        <CommandList>
-          <CommandEmpty>No commands found</CommandEmpty>
-          {Object.entries(grouped).map(([category, cmds]) => (
-            <CommandGroup key={category} heading={category}>
-              {cmds.map((cmd) => (
-                <CommandItem
+    <div className="absolute bottom-full left-0 mb-2 w-72 rounded-lg border bg-popover shadow-md z-50">
+      <div className="max-h-64 overflow-y-auto p-1">
+        {Object.entries(grouped).map(([category, cmds]) => (
+          <div key={category}>
+            <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-muted-foreground">
+              {category}
+            </div>
+            {cmds.map((cmd) => {
+              const idx = flatItems.find((f) => f.cmd.id === cmd.id)!.index;
+              return (
+                <div
                   key={cmd.id}
-                  onSelect={() => onSelect(cmd)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer',
+                    idx === highlightedIndex && 'bg-accent text-accent-foreground',
+                  )}
+                  onMouseDown={(e) => { e.preventDefault(); onSelect(cmd); }}
                 >
                   <span className="font-medium">{cmd.name}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">
+                  <span className="ml-auto text-xs text-muted-foreground truncate max-w-[160px]">
                     {cmd.description}
                   </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ))}
-        </CommandList>
-      </Command>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

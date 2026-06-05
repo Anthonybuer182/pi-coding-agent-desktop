@@ -1,6 +1,6 @@
 import type { ChatService, SendMessageParams, StreamChunk } from '../services/chat.js';
-import type { Message, AssistantMessage, ContentBlock } from '@pi/types';
-import { createAgentSession, SessionManager } from '@earendil-works/pi-coding-agent';
+import type { Message, AssistantMessage, ContentBlock, TokenUsage, ContextUsageInfo, SessionStatsInfo, MessageTiming } from '@pi/types';
+import { createAgentSession, SessionManager, ModelRegistry, AuthStorage, DefaultResourceLoader, getAgentDir } from '@earendil-works/pi-coding-agent';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
 
 /**
@@ -12,6 +12,54 @@ import type { AgentSession } from '@earendil-works/pi-coding-agent';
  */
 export function createRealChatService(cwd: string): ChatService {
   const activeSessions = new Map<string, { session: AgentSession; unsubscribe: () => void }>();
+  // Track last message end time per session for thinking time calculation
+  const sessionTimings = new Map<string, number>();
+
+  // Shared ModelRegistry — picks up built-in models + models from ~/.pi/agent/models.json
+  const modelRegistry = ModelRegistry.create(AuthStorage.inMemory());
+
+  /** Find a model in the registry by its ID string.
+   *  Supports "provider/modelId" format for disambiguation.
+   *  When multiple models share the same ID, prefers custom providers
+   *  (from models.json) over built-in ones. */
+  function findModelById(modelId: string) {
+    const slashIdx = modelId.lastIndexOf('/');
+    if (slashIdx > 0) {
+      const provider = modelId.substring(0, slashIdx);
+      const id = modelId.substring(slashIdx + 1);
+      return modelRegistry.getAll().find((m) => m.id === id && m.provider === provider);
+    }
+    // Find by ID, preferring the last match (custom models are appended after built-in)
+    const all = modelRegistry.getAll();
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (all[i].id === modelId) return all[i];
+    }
+    return undefined;
+  }
+
+  /** Convert SDK Usage to our TokenUsage format */
+  function sdkUsageToTokenUsage(usage: any): TokenUsage {
+    return {
+      inputTokens: usage.input ?? 0,
+      outputTokens: usage.output ?? 0,
+      totalTokens: usage.totalTokens ?? (usage.input ?? 0) + (usage.output ?? 0),
+      cacheReadTokens: usage.cacheRead ?? 0,
+      cacheWriteTokens: usage.cacheWrite ?? 0,
+      cost: usage.cost?.total ?? 0,
+    };
+  }
+
+  async function createResourceLoader(workCwd: string) {
+    const resourceLoader = new DefaultResourceLoader({
+      cwd: workCwd,
+      agentDir: getAgentDir(),
+      appendSystemPrompt: [
+        'You are equipped with vision capabilities. When users attach images or when the read tool loads image files, analyze the visual content directly. This includes: screenshots of code/errors, UI designs, architecture diagrams, charts, photos, and any other images the user shares. Describe what you see clearly and use it to provide better coding assistance.',
+      ],
+    });
+    await resourceLoader.reload();
+    return resourceLoader;
+  }
 
   async function getOrCreateAgentSession(
     sessionId?: string,
@@ -37,6 +85,8 @@ export function createRealChatService(cwd: string): ChatService {
     const { session } = await createAgentSession({
       cwd: workCwd,
       sessionManager,
+      modelRegistry, // share registry so custom models are visible
+      resourceLoader: await createResourceLoader(workCwd),
     });
 
     const unsubscribe = session.subscribe((_event) => {
@@ -49,8 +99,44 @@ export function createRealChatService(cwd: string): ChatService {
 
   return {
     async sendMessage(params: SendMessageParams): Promise<Message> {
-      const session = await getOrCreateAgentSession(params.sessionId);
-      await session.prompt(params.content);
+      const session = await getOrCreateAgentSession(params.sessionId, params.workspaceCwd);
+
+      try {
+        // Switch to the requested model if specified
+        if (params.modelId) {
+          const model = findModelById(params.modelId);
+          if (model) {
+            await session.setModel(model);
+          }
+        }
+
+        const images = params.attachments?.length
+          ? params.attachments
+              .filter((a) => a.mimeType.startsWith('image/') && a.data)
+              .map((a) => ({
+                type: 'image' as const,
+                data: a.data,
+                mimeType: a.mimeType,
+              }))
+          : undefined;
+        await session.prompt(params.content, images?.length ? { images } : undefined);
+      } catch (_err) {
+        // Error surfaced via return value instead of throw
+      }
+
+      // Get session stats for cost/usage on the returned message
+      let totalUsage: TokenUsage | undefined;
+      try {
+        const stats = session.getSessionStats();
+        totalUsage = {
+          inputTokens: stats.tokens.input,
+          outputTokens: stats.tokens.output,
+          totalTokens: stats.tokens.total,
+          cacheReadTokens: stats.tokens.cacheRead,
+          cacheWriteTokens: stats.tokens.cacheWrite,
+          cost: stats.cost,
+        };
+      } catch { /* stats are best-effort */ }
 
       const asstMsg: AssistantMessage = {
         id: `msg-${Date.now()}-asst`,
@@ -60,6 +146,7 @@ export function createRealChatService(cwd: string): ChatService {
         modelId: params.modelId ?? 'unknown',
         content: session.getLastAssistantText() || '',
         blocks: [],
+        usage: totalUsage,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -72,11 +159,32 @@ export function createRealChatService(cwd: string): ChatService {
       onChunk: (chunk: StreamChunk) => void,
       signal?: AbortSignal,
     ): Promise<Message> {
-      const session = await getOrCreateAgentSession(params.sessionId);
+      const session = await getOrCreateAgentSession(params.sessionId, params.workspaceCwd);
+      const sessionKey = params.sessionId || 'default';
+
+      // Guard to prevent writing to a closed SSE stream
+      let streamActive = true;
+      const safeChunk = (chunk: StreamChunk) => {
+        if (streamActive) {
+          try { onChunk(chunk); } catch { /* ignore write-after-end */ }
+        }
+      };
+
+      // Timing tracking
+      let messageStartTime = 0;
+      let messageEndTime = 0;
+      let outputText = '';
+      const toolStartTimes = new Map<string, number>();
 
       const unsubscribe = session.subscribe((event: any) => {
+        // Skip sending chunks if stream is already closed
+        if (!streamActive) return;
         switch (event.type) {
-          case 'message_start':
+          case 'message_start': {
+            messageStartTime = Date.now();
+            // Fall through to process content like message_update
+          }
+          // eslint-disable-next-line no-fallthrough
           case 'message_update': {
             const msg = event.message;
             if (msg && msg.content) {
@@ -84,9 +192,10 @@ export function createRealChatService(cwd: string): ChatService {
               if (Array.isArray(content)) {
                 for (const block of content) {
                   if (block.type === 'text' && block.text) {
-                    onChunk({ type: 'text', content: block.text });
+                    outputText += block.text;
+                    safeChunk({ type: 'text', content: block.text });
                   } else if (block.type === 'thinking') {
-                    onChunk({
+                    safeChunk({
                       type: 'block',
                       block: {
                         id: `b-think-${Date.now()}`,
@@ -96,7 +205,7 @@ export function createRealChatService(cwd: string): ChatService {
                       },
                     });
                   } else if (block.type === 'toolCall' || block.type === 'tool_call') {
-                    onChunk({
+                    safeChunk({
                       type: 'block',
                       block: {
                         id: `b-tc-${Date.now()}`,
@@ -109,13 +218,15 @@ export function createRealChatService(cwd: string): ChatService {
                   }
                 }
               } else if (typeof content === 'string') {
-                onChunk({ type: 'text', content });
+                outputText += content;
+                safeChunk({ type: 'text', content });
               }
             }
             break;
           }
           case 'tool_execution_start': {
-            onChunk({
+            toolStartTimes.set(event.toolCallId, Date.now());
+            safeChunk({
               type: 'block',
               block: {
                 id: `b-te-${Date.now()}`,
@@ -128,7 +239,11 @@ export function createRealChatService(cwd: string): ChatService {
             break;
           }
           case 'tool_execution_end': {
-            onChunk({
+            const startTime = toolStartTimes.get(event.toolCallId);
+            const durationMs = startTime ? Date.now() - startTime : undefined;
+            toolStartTimes.delete(event.toolCallId);
+
+            safeChunk({
               type: 'block',
               block: {
                 id: `b-ter-${Date.now()}`,
@@ -139,16 +254,93 @@ export function createRealChatService(cwd: string): ChatService {
                 isError: event.isError,
               },
             });
+
+            // Emit tool timing
+            if (durationMs !== undefined) {
+              safeChunk({
+                type: 'tool_timing',
+                toolTiming: {
+                  toolCallId: event.toolCallId,
+                  toolName: event.toolName,
+                  durationMs,
+                },
+              });
+            }
             break;
           }
           case 'message_end': {
-            onChunk({ type: 'done' });
+            messageEndTime = Date.now();
+            // Forward usage data from the completed message
+            const endMsg = event.message;
+            const msgUsage = endMsg?.usage;
+            if (msgUsage) {
+              const tokenUsage = sdkUsageToTokenUsage(msgUsage);
+              safeChunk({ type: 'usage', usage: tokenUsage });
+
+              // Calculate per-message timing metrics
+              const prevEndTime = sessionTimings.get(sessionKey) ?? 0;
+              const thinkingTimeMs = prevEndTime > 0 ? Math.max(0, messageStartTime - prevEndTime) : 0;
+              const generationTimeMs = Math.max(1, messageEndTime - messageStartTime);
+              const outputTokens = tokenUsage.outputTokens || 0;
+              const estTokens = Math.ceil(outputText.length / 4);
+              const tps = outputTokens / (generationTimeMs / 1000);
+
+              safeChunk({
+                type: 'message_timing',
+                messageTiming: {
+                  estTokens,
+                  tps: Math.round(tps * 10) / 10,
+                  thinkingTimeMs,
+                  generationTimeMs,
+                },
+              });
+
+              // Update last message end time for this session
+              sessionTimings.set(sessionKey, messageEndTime);
+            }
             break;
           }
           case 'agent_end': {
             // Agent ended (may retry or finalize)
             if (!event.willRetry) {
-              onChunk({ type: 'done' });
+              // Send context usage before done
+              try {
+                const ctxUsage = session.getContextUsage();
+                if (ctxUsage) {
+                  safeChunk({
+                    type: 'context',
+                    contextUsage: {
+                      tokens: ctxUsage.tokens,
+                      contextWindow: ctxUsage.contextWindow,
+                      percent: ctxUsage.percent,
+                    },
+                  });
+                }
+              } catch { /* best-effort */ }
+
+              // Send session stats before done
+              try {
+                const stats = session.getSessionStats();
+                const ctxUsage = stats.contextUsage ?? session.getContextUsage();
+                safeChunk({
+                  type: 'stats',
+                  sessionStats: {
+                    tokens: {
+                      input: stats.tokens.input,
+                      output: stats.tokens.output,
+                      cacheRead: stats.tokens.cacheRead,
+                      cacheWrite: stats.tokens.cacheWrite,
+                      total: stats.tokens.total,
+                    },
+                    cost: stats.cost,
+                    contextUsage: ctxUsage
+                      ? { tokens: ctxUsage.tokens, contextWindow: ctxUsage.contextWindow, percent: ctxUsage.percent }
+                      : undefined,
+                  },
+                });
+              } catch { /* best-effort */ }
+
+              safeChunk({ type: 'done' });
             }
             break;
           }
@@ -157,12 +349,46 @@ export function createRealChatService(cwd: string): ChatService {
 
       if (signal) {
         signal.addEventListener('abort', () => {
+          streamActive = false;
           session.abort();
         }, { once: true });
       }
 
       try {
-        await session.prompt(params.content);
+        // Switch to the requested model if specified
+        if (params.modelId) {
+          const model = findModelById(params.modelId);
+          if (model) {
+            await session.setModel(model);
+          }
+        }
+
+        // Build image content array for vision models
+        const images = params.attachments?.length
+          ? params.attachments
+              .filter((a) => a.mimeType.startsWith('image/') && a.data)
+              .map((a) => ({
+                type: 'image' as const,
+                data: a.data,
+                mimeType: a.mimeType,
+              }))
+          : undefined;
+
+        await session.prompt(params.content, images?.length ? { images } : undefined);
+
+        // Build final usage for returned message
+        let totalUsage: TokenUsage | undefined;
+        try {
+          const stats = session.getSessionStats();
+          totalUsage = {
+            inputTokens: stats.tokens.input,
+            outputTokens: stats.tokens.output,
+            totalTokens: stats.tokens.total,
+            cacheReadTokens: stats.tokens.cacheRead,
+            cacheWriteTokens: stats.tokens.cacheWrite,
+            cost: stats.cost,
+          };
+        } catch { /* stats are best-effort */ }
 
         const asstMsg: AssistantMessage = {
           id: `msg-${Date.now()}-asst`,
@@ -172,15 +398,18 @@ export function createRealChatService(cwd: string): ChatService {
           modelId: params.modelId ?? 'unknown',
           content: session.getLastAssistantText() || '',
           blocks: [],
+          usage: totalUsage,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
 
+        streamActive = false;
         return asstMsg;
       } catch (err) {
-        onChunk({ type: 'error', error: err instanceof Error ? err.message : 'Unknown error' });
+        safeChunk({ type: 'error', error: err instanceof Error ? err.message : 'Unknown error' });
         throw err;
       } finally {
+        streamActive = false;
         unsubscribe();
       }
     },

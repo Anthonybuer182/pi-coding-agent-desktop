@@ -13,6 +13,10 @@ interface ComposerInputProps {
   placeholder?: string;
   autoResize?: boolean;
   maxRows?: number;
+  showMenu?: boolean;
+  onMenuNavigate?: (direction: 'up' | 'down') => void;
+  onMenuSelect?: () => void;
+  totalMenuItems?: number;
 }
 
 export function ComposerInput({
@@ -27,6 +31,9 @@ export function ComposerInput({
   placeholder = 'Type a message, / for commands, or @ to mention...',
   autoResize = true,
   maxRows = 8,
+  showMenu = false,
+  onMenuNavigate,
+  onMenuSelect,
 }: ComposerInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -70,6 +77,32 @@ export function ComposerInput({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // When menu is open, route navigation keys to the menu
+      if (showMenu) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          onMenuNavigate?.('down');
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          onMenuNavigate?.('up');
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          onMenuSelect?.();
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onSlashDismiss?.();
+          onMentionDismiss?.();
+          return;
+        }
+        return;
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         if (value.trim()) {
@@ -81,7 +114,7 @@ export function ComposerInput({
         onMentionDismiss?.();
       }
     },
-    [value, onSubmit, onSlashDismiss, onMentionDismiss],
+    [value, onSubmit, onSlashDismiss, onMentionDismiss, showMenu, onMenuNavigate, onMenuSelect],
   );
 
   return (
@@ -95,7 +128,7 @@ export function ComposerInput({
       rows={1}
       aria-label="Message input"
       className={cn(
-        'flex-1 resize-none bg-transparent px-3 py-2 text-sm',
+        'w-full resize-none bg-transparent px-3 py-2 text-sm',
         'placeholder:text-muted-foreground',
         'focus:outline-none',
         'disabled:cursor-not-allowed disabled:opacity-50',

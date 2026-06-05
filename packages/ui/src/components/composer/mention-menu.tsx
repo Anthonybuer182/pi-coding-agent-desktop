@@ -1,4 +1,4 @@
-import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 
 export type MentionTarget = 'workspace' | 'session' | 'file' | 'folder' | 'code';
 
@@ -12,6 +12,7 @@ export interface MentionItem {
 interface MentionMenuProps {
   items: MentionItem[];
   query: string;
+  highlightedIndex: number;
   onSelect: (item: MentionItem) => void;
 }
 
@@ -31,7 +32,7 @@ const typeLabels: Record<MentionTarget, string> = {
   code: 'Code',
 };
 
-export function MentionMenu({ items, query, onSelect }: MentionMenuProps) {
+export function MentionMenu({ items, query, highlightedIndex, onSelect }: MentionMenuProps) {
   const filtered = query
     ? items.filter((i) => i.label.toLowerCase().includes(query.toLowerCase()))
     : items;
@@ -47,33 +48,47 @@ export function MentionMenu({ items, query, onSelect }: MentionMenuProps) {
     {} as Record<string, MentionItem[]>,
   );
 
+  let globalIndex = 0;
+  for (const groupItems of Object.values(grouped)) {
+    globalIndex += groupItems.length;
+  }
+
+  let idx = 0;
+
   return (
-    <div className="absolute bottom-full left-0 mb-2 w-72">
-      <Command className="rounded-lg border shadow-md">
-        <CommandList>
-          <CommandEmpty>No matches found</CommandEmpty>
-          {Object.entries(grouped).map(([type, groupItems]) => (
-            <CommandGroup key={type} heading={typeLabels[type as MentionTarget] || type}>
-              {groupItems.map((item) => (
-                <CommandItem
+    <div className="absolute bottom-full left-0 mb-2 w-80 rounded-lg border bg-popover shadow-md z-50">
+      <div className="max-h-72 overflow-y-auto p-1">
+        {Object.entries(grouped).map(([type, groupItems]) => (
+          <div key={type}>
+            <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-muted-foreground">
+              {typeLabels[type as MentionTarget] || type}
+            </div>
+            {groupItems.map((item) => {
+              const currentIdx = idx++;
+              return (
+                <div
                   key={item.id}
-                  onSelect={() => onSelect(item)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer',
+                    currentIdx === highlightedIndex && 'bg-accent text-accent-foreground',
+                  )}
+                  onMouseDown={(e) => { e.preventDefault(); onSelect(item); }}
                 >
-                  <span className="flex h-5 w-5 items-center justify-center rounded bg-muted text-[10px] font-bold text-muted-foreground mr-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded bg-muted text-[10px] font-bold text-muted-foreground shrink-0">
                     {typeIcons[item.type as MentionTarget] || '?'}
                   </span>
-                  <span className="font-medium">@{item.label}</span>
+                  <span className="font-medium truncate">@{item.label}</span>
                   {item.description && (
-                    <span className="ml-2 text-xs text-muted-foreground">
+                    <span className="ml-auto text-xs text-muted-foreground shrink-0">
                       {item.description}
                     </span>
                   )}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          ))}
-        </CommandList>
-      </Command>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -23,8 +23,8 @@ const LANGUAGE_MAP: Record<string, string> = {
 
 export function createRealFileService(): FileService {
   return {
-    async list(_workspaceId: string, dirPath?: string): Promise<FileEntry[]> {
-      const dir = dirPath || '/';
+    async list(workspaceId: string, dirPath?: string): Promise<FileEntry[]> {
+      const dir = dirPath || workspaceId;
       try {
         const entries = readdirSync(dir, { withFileTypes: true });
         return entries.map((entry) => ({

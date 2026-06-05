@@ -3,18 +3,136 @@
  * This eliminates the need for a separate backend process during development.
  */
 import type { Plugin, ViteDevServer } from 'vite';
+import { execSync } from 'child_process';
+import { existsSync } from 'fs';
+
+function openNativeFolderPicker(): string | null {
+  const platform = process.platform;
+  try {
+    if (platform === 'darwin') {
+      const script = 'choose folder with prompt "Select workspace folder"';
+      const result = execSync(`osascript -e 'POSIX path of (${script})'`, {
+        encoding: 'utf-8',
+        timeout: 60_000,
+      });
+      const path = result.trim();
+      return path && existsSync(path) ? path : null;
+    }
+    if (platform === 'win32') {
+      const psScript = `
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = "Select workspace folder"
+        if ($dialog.ShowDialog() -eq "OK") { $dialog.SelectedPath }
+      `;
+      const result = execSync(
+        `powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"')}"`,
+        { encoding: 'utf-8', timeout: 60_000 },
+      );
+      const path = result.trim();
+      return path && existsSync(path) ? path : null;
+    }
+    // Linux
+    try {
+      const result = execSync('zenity --file-selection --directory --title="Select workspace folder" 2>/dev/null', {
+        encoding: 'utf-8',
+        timeout: 60_000,
+      });
+      const path = result.trim();
+      return path && existsSync(path) ? path : null;
+    } catch {
+      // zenity not available, try kdialog
+      try {
+        const result = execSync('kdialog --getexistingdirectory 2>/dev/null', {
+          encoding: 'utf-8',
+          timeout: 60_000,
+        });
+        const path = result.trim();
+        return path && existsSync(path) ? path : null;
+      } catch {
+        return null;
+      }
+    }
+  } catch {
+    return null;
+  }
+}
 
 function setupApiRoutes(server: ViteDevServer): void {
   server.middlewares.use(async (req, res, next) => {
+    // Handle streaming chat endpoint
+    if (req.method === 'POST' && req.url?.startsWith('/api/chat/stream')) {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', async () => {
+        try {
+          await loadAdapters(server);
+          const body = JSON.parse(Buffer.concat(chunks).toString());
+          const { method, params } = body;
+
+          // SSE headers
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          });
+          res.flushHeaders();
+
+          const sendSSE = (data: unknown) => {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+          };
+
+          try {
+            if (method === 'chat.sendMessageStream') {
+              const { createRealChatService } = await server.ssrLoadModule('@pi/sdk-wrapper/adapters');
+              const chatService = createRealChatService(process.cwd());
+              await chatService.sendMessageStream(params, (chunk) => {
+                sendSSE(chunk);
+              });
+              // Close stream cleanly after the adapter finishes
+              if (!res.writableEnded) {
+                sendSSE({ type: 'done' });
+                res.end();
+              }
+            } else {
+              sendSSE({ type: 'error', error: `Unknown streaming method: ${method}` });
+              res.end();
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            if (!res.writableEnded) {
+              sendSSE({ type: 'error', error: message });
+              res.end();
+            }
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Parse error';
+          if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+          }
+          res.end(JSON.stringify({ error: message }));
+        }
+      });
+      req.on('error', (err) => {
+        console.error('[pi-api] SSE error:', err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end();
+        }
+      });
+      return;
+    }
+
+    // Regular non-streaming API
     if (req.method !== 'POST' || !req.url?.startsWith('/api/request')) {
       return next();
     }
 
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    const reqChunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => reqChunks.push(chunk));
     req.on('end', async () => {
       try {
-        const body = JSON.parse(Buffer.concat(chunks).toString());
+        const body = JSON.parse(Buffer.concat(reqChunks).toString());
         const { id, method, params } = body;
 
         const result = await handleRequest(server, method, params);
@@ -24,7 +142,7 @@ function setupApiRoutes(server: ViteDevServer): void {
         console.error('[pi-api] Error:', err);
         let reqId = 'unknown';
         try {
-          reqId = JSON.parse(Buffer.concat(chunks).toString()).id || 'unknown';
+          reqId = JSON.parse(Buffer.concat(reqChunks).toString()).id || 'unknown';
         } catch {}
         const message = err instanceof Error ? err.message : 'Unknown error';
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -114,7 +232,7 @@ async function handleRequest(server: ViteDevServer, method: string, params: any)
     case 'file':
       switch (action) {
         case 'read': return fileService.read(params.workspaceId, params.path);
-        case 'list': return fileService.list(params.workspaceId, params.dirPath);
+        case 'list': return fileService.list(params.workspaceId, params.directory ?? params.dirPath);
         case 'write': return fileService.write(params.workspaceId, params.path, params.content);
       }
       break;
@@ -133,6 +251,19 @@ async function handleRequest(server: ViteDevServer, method: string, params: any)
         case 'get': return configService.get();
         case 'update': return configService.update(params.data);
         case 'listModels': return configService.listModels();
+        case 'getModelsConfig': return configService.getModelsConfig();
+        case 'saveModelsConfig': return configService.saveModelsConfig(params.config);
+        case 'upsertProvider': return configService.upsertProvider(params.name as string, params.provider as any);
+        case 'deleteProvider': return configService.deleteProvider(params.name as string);
+        case 'addModel': return configService.addModel(params.providerName as string, params.model as any);
+        case 'deleteModel': return configService.deleteModel(params.providerName as string, params.modelId as string);
+        case 'updateModel': return configService.updateModel(params.providerName as string, params.modelId as string, params.model as any);
+      }
+      break;
+
+    case 'system':
+      switch (action) {
+        case 'selectDirectory': return openNativeFolderPicker();
       }
       break;
 

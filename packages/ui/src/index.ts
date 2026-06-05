@@ -42,5 +42,7 @@ export { Composer, ComposerInput, SendButton, SlashCommandMenu, MentionMenu, Att
 export { DocumentPreview, CodeEditor, MarkdownPreview, ImagePreview, PDFPreview, OfficeDocPreview, EmptyPreview } from './components/document';
 export { DiffReview, DiffLine, DiffHunk, DiffHeader, AcceptRejectControls, EmptyDiff } from './components/diff';
 export { ModelSelector, ThinkLevelSelector, CompactToggle, SkillSelector } from './components/model';
+export { ProviderSettings } from './components/settings';
 export { UsageStatistics } from './components/usage';
 export { ErrorBoundary, LoadingSpinner, EmptyState, ErrorState, ConfirmDialog } from './components/common';
+export { FileTree, FileTreeNode } from './components/file';

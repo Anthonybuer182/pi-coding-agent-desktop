@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, dialog } from 'electron';
 import {
   createRealWorkspaceService,
   createRealSessionService,
@@ -51,6 +51,7 @@ async function routeRequest(method: string, params: unknown): Promise<unknown> {
     case 'file': return handleFile(action, params);
     case 'diff': return handleDiff(action, params);
     case 'config': return handleConfig(action, params);
+    case 'system': return handleSystem(action);
     default:
       throw new Error(`Unknown service: ${service}`);
   }
@@ -108,7 +109,7 @@ async function handleFile(action: string, params: unknown): Promise<unknown> {
   const p = params as Record<string, unknown>;
   switch (action) {
     case 'read': return fileService.read(p.workspaceId as string, p.path as string);
-    case 'list': return fileService.list(p.workspaceId as string, p.dirPath as string | undefined);
+    case 'list': return fileService.list(p.workspaceId as string, (p.directory ?? p.dirPath) as string | undefined);
     case 'write': return fileService.write(p.workspaceId as string, p.path as string, p.content as string);
     default: throw new Error(`Unknown file action: ${action}`);
   }
@@ -131,6 +132,29 @@ async function handleConfig(action: string, params: unknown): Promise<unknown> {
     case 'get': return configService.get();
     case 'update': return configService.update(p.data as any);
     case 'listModels': return configService.listModels();
+    case 'getModelsConfig': return configService.getModelsConfig();
+    case 'saveModelsConfig': return configService.saveModelsConfig(p.config as any);
+    case 'upsertProvider': return configService.upsertProvider(p.name as string, p.provider as any);
+    case 'deleteProvider': return configService.deleteProvider(p.name as string);
+    case 'addModel': return configService.addModel(p.providerName as string, p.model as any);
+    case 'deleteModel': return configService.deleteModel(p.providerName as string, p.modelId as string);
+    case 'updateModel': return configService.updateModel(p.providerName as string, p.modelId as string, p.model as any);
     default: throw new Error(`Unknown config action: ${action}`);
+  }
+}
+
+async function handleSystem(action: string): Promise<unknown> {
+  switch (action) {
+    case 'selectDirectory': {
+      const result = await dialog.showOpenDialog({
+        title: 'Select workspace folder',
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      if (result.canceled || result.filePaths.length === 0) {
+        return null;
+      }
+      return result.filePaths[0];
+    }
+    default: throw new Error(`Unknown system action: ${action}`);
   }
 }

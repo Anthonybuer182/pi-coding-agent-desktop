@@ -9,7 +9,7 @@ interface UIState {
   activeDiffId: string | null;
   sidebarOpen: boolean;
   rightPanelOpen: boolean;
-  rightPanelActiveTab: 'preview' | 'diff';
+  rightPanelActiveTab: 'preview' | 'diff' | 'settings';
   compactMode: boolean;
   selectedSkills: string[];
   connectionStatus: ConnectionStatus;
@@ -47,7 +47,7 @@ export const useUIStore = create<UIState>((set) => ({
   setActiveDiff: (id) => set({ activeDiffId: id, rightPanelActiveTab: 'diff' }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
-  setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab as 'preview' | 'diff' }),
+  setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab as 'preview' | 'diff' | 'settings' }),
   setCompactMode: (compact) => set({ compactMode: compact }),
   toggleSkill: (skillId) =>
     set((s) => ({

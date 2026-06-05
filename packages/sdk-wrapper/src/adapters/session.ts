@@ -169,9 +169,12 @@ function toMessage(msg: any, sessionId: string, index: number): Message | null {
       createdAt: timestamp,
       updatedAt: timestamp,
       usage: msg.usage ? {
-        inputTokens: msg.usage.inputTokens || 0,
-        outputTokens: msg.usage.outputTokens || 0,
-        totalTokens: (msg.usage.inputTokens || 0) + (msg.usage.outputTokens || 0),
+        inputTokens: msg.usage.input ?? msg.usage.inputTokens ?? 0,
+        outputTokens: msg.usage.output ?? msg.usage.outputTokens ?? 0,
+        totalTokens: msg.usage.totalTokens ?? (msg.usage.input ?? 0) + (msg.usage.output ?? 0),
+        cacheReadTokens: msg.usage.cacheRead ?? msg.usage.cacheReadTokens ?? 0,
+        cacheWriteTokens: msg.usage.cacheWrite ?? msg.usage.cacheWriteTokens ?? 0,
+        cost: msg.usage.cost?.total ?? 0,
       } : undefined,
     } as AssistantMessage;
   }

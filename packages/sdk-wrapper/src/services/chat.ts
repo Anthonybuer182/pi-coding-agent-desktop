@@ -1,17 +1,24 @@
-import type { Message, ContentBlock } from '@pi/types';
+import type { Message, ContentBlock, TokenUsage, ContextUsageInfo, SessionStatsInfo, MessageTiming, ToolTiming } from '@pi/types';
 
 export interface SendMessageParams {
   sessionId: string;
   content: string;
-  attachments?: string[];
+  /** Image attachments with base64 data for vision models */
+  attachments?: { name: string; mimeType: string; data: string }[];
   modelId?: string;
+  workspaceCwd?: string;
 }
 
 export interface StreamChunk {
-  type: 'text' | 'block' | 'done' | 'error';
+  type: 'text' | 'block' | 'usage' | 'context' | 'stats' | 'message_timing' | 'tool_timing' | 'done' | 'error';
   content?: string;
   block?: ContentBlock;
   error?: string;
+  usage?: TokenUsage;
+  contextUsage?: ContextUsageInfo;
+  sessionStats?: SessionStatsInfo;
+  messageTiming?: MessageTiming;
+  toolTiming?: ToolTiming;
 }
 
 export interface ChatService {

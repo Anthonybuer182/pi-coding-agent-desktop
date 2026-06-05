@@ -32,6 +32,63 @@ export class HTTPTransport implements Transport {
     return data.result;
   }
 
+  /**
+   * Stream request via Server-Sent Events.
+   * Reads the response body as an SSE stream and calls onEvent for each data frame.
+   */
+  async streamRequest(
+    method: string,
+    params: unknown,
+    onEvent: (data: any) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: generateRequestId(), method, params }),
+      signal,
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    if (!res.body) throw new Error('No response body');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              onEvent(data);
+            } catch {
+              // skip unparseable lines
+            }
+          }
+        }
+      }
+
+      // Process remaining buffer
+      if (buffer.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(buffer.slice(6));
+          onEvent(data);
+        } catch {}
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   on(event: TransportEventType, handler: TransportEventHandler): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());

@@ -1,5 +1,6 @@
 import type { Transport } from '../transport/base.js';
 import type { ConfigService } from '../services/config.js';
+import type { ModelsConfig, ProviderEntry, ModelEntry } from '@pi/types';
 
 export function createProxyConfigService(transport: Transport): ConfigService {
   return {
@@ -11,6 +12,28 @@ export function createProxyConfigService(transport: Transport): ConfigService {
     },
     async listModels() {
       return transport.request('config.listModels') as ReturnType<ConfigService['listModels']>;
+    },
+    // models.json CRUD
+    async getModelsConfig() {
+      return transport.request('config.getModelsConfig') as Promise<ModelsConfig>;
+    },
+    async saveModelsConfig(config: ModelsConfig) {
+      return transport.request('config.saveModelsConfig', { config }) as Promise<void>;
+    },
+    async upsertProvider(name: string, provider: ProviderEntry) {
+      return transport.request('config.upsertProvider', { name, provider }) as Promise<void>;
+    },
+    async deleteProvider(name: string) {
+      return transport.request('config.deleteProvider', { name }) as Promise<void>;
+    },
+    async addModel(providerName: string, model: ModelEntry) {
+      return transport.request('config.addModel', { providerName, model }) as Promise<void>;
+    },
+    async deleteModel(providerName: string, modelId: string) {
+      return transport.request('config.deleteModel', { providerName, modelId }) as Promise<void>;
+    },
+    async updateModel(providerName: string, modelId: string, model: Partial<ModelEntry>) {
+      return transport.request('config.updateModel', { providerName, modelId, model }) as Promise<void>;
     },
   };
 }

@@ -11,5 +11,7 @@ export interface Attachment {
   url?: string;
   status: AttachmentStatus;
   preview?: string;
+  /** base64 encoded raw data (without data: URL prefix), populated after FileReader reads the file */
+  data?: string;
   createdAt: string;
 }

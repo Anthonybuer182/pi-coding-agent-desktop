@@ -1,8 +1,8 @@
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 import type { ConfigService } from '../services/config.js';
 import { SettingsManager, AuthStorage, ModelRegistry, getAgentDir } from '@earendil-works/pi-coding-agent';
-import type { Config, ModelInfo, ModelProvider } from '@pi/types';
+import type { Config, ModelInfo, ModelProvider, ModelsConfig, ProviderEntry, ModelEntry } from '@pi/types';
 
 // Map real SDK thinking levels to our Config thinking levels
 function toConfigThinkLevel(level?: string): Config['defaultThinkLevel'] {
@@ -86,12 +86,54 @@ function getConfiguredModelProviders(): Set<string> {
   return providers;
 }
 
+// models.json helpers
+
+function getModelsJsonPath(): string {
+  return join(getAgentDir(), 'models.json');
+}
+
+function readModelsConfig(): ModelsConfig {
+  const path = getModelsJsonPath();
+  try {
+    if (existsSync(path)) {
+      const raw = readFileSync(path, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return { providers: parsed?.providers ?? {} };
+    }
+  } catch {
+    // unreadable or malformed
+  }
+  return { providers: {} };
+}
+
+function writeModelsConfig(config: ModelsConfig): void {
+  const path = getModelsJsonPath();
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  writeFileSync(path, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+// Re-read configured providers after models.json changes
+function refreshConfiguredProviders(modelRegistry: ModelRegistry): Set<string> {
+  // Re-create registry to pick up changes
+  const providers = getConfiguredModelProviders();
+  // Force registry refresh
+  try {
+    modelRegistry.refresh();
+  } catch {
+    // refresh might not be available on in-memory instance
+  }
+  return providers;
+}
+
 export function createRealConfigService(cwd: string, agentDir?: string): ConfigService {
   const settings = SettingsManager.create(cwd, agentDir);
   const modelRegistry = ModelRegistry.create(AuthStorage.inMemory());
 
-  // Determine which providers have usable auth
-  const configuredProviders = getConfiguredModelProviders();
+  // Determine which providers have usable auth (mutable after models.json writes)
+  let configuredProviders = getConfiguredModelProviders();
 
   return {
     async get(): Promise<Config> {
@@ -138,6 +180,63 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
         maxTokens: m.maxTokens,
         isAvailable: true,
       }));
+    },
+
+    // models.json CRUD
+
+    async getModelsConfig(): Promise<ModelsConfig> {
+      return readModelsConfig();
+    },
+
+    async saveModelsConfig(config: ModelsConfig): Promise<void> {
+      writeModelsConfig(config);
+      configuredProviders = refreshConfiguredProviders(modelRegistry);
+    },
+
+    async upsertProvider(name: string, provider: ProviderEntry): Promise<void> {
+      const current = readModelsConfig();
+      current.providers[name] = provider;
+      writeModelsConfig(current);
+      configuredProviders = refreshConfiguredProviders(modelRegistry);
+    },
+
+    async deleteProvider(name: string): Promise<void> {
+      const current = readModelsConfig();
+      delete current.providers[name];
+      writeModelsConfig(current);
+      configuredProviders = refreshConfiguredProviders(modelRegistry);
+    },
+
+    async addModel(providerName: string, model: ModelEntry): Promise<void> {
+      const current = readModelsConfig();
+      const provider = current.providers[providerName];
+      if (!provider) throw new Error(`供应商 "${providerName}" 不存在`);
+      if (provider.models.find((m) => m.id === model.id)) {
+        throw new Error(`模型 "${model.id}" 已存在`);
+      }
+      provider.models.push(model);
+      writeModelsConfig(current);
+      configuredProviders = refreshConfiguredProviders(modelRegistry);
+    },
+
+    async deleteModel(providerName: string, modelId: string): Promise<void> {
+      const current = readModelsConfig();
+      const provider = current.providers[providerName];
+      if (!provider) throw new Error(`供应商 "${providerName}" 不存在`);
+      provider.models = provider.models.filter((m) => m.id !== modelId);
+      writeModelsConfig(current);
+      configuredProviders = refreshConfiguredProviders(modelRegistry);
+    },
+
+    async updateModel(providerName: string, modelId: string, model: Partial<ModelEntry>): Promise<void> {
+      const current = readModelsConfig();
+      const provider = current.providers[providerName];
+      if (!provider) throw new Error(`供应商 "${providerName}" 不存在`);
+      const idx = provider.models.findIndex((m) => m.id === modelId);
+      if (idx === -1) throw new Error(`模型 "${modelId}" 不存在`);
+      provider.models[idx] = { ...provider.models[idx], ...model, id: modelId };
+      writeModelsConfig(current);
+      configuredProviders = refreshConfiguredProviders(modelRegistry);
     },
   };
 }

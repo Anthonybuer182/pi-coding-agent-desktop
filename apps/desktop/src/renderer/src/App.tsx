@@ -1,7 +1,6 @@
 import { useMemo, useEffect } from 'react';
-import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createProxySDKClient, DEFAULT_SLASH_COMMANDS, IPCTransport } from '@pi/sdk-wrapper';
-import type { Config, Skill } from '@pi/types';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createProxySDKClient, IPCTransport } from '@pi/sdk-wrapper';
 import {
   SDKProvider,
   useSDK,
@@ -22,13 +21,20 @@ import { ChatTimeline } from '@pi/ui';
 import { Composer } from '@pi/ui';
 import { DocumentPreview } from '@pi/ui';
 import { DiffReview } from '@pi/ui';
-import { ModelSelector } from '@pi/ui';
-import { ThinkLevelSelector } from '@pi/ui';
-import { CompactToggle } from '@pi/ui';
-import { SkillSelector } from '@pi/ui';
 import { UsageStatistics } from '@pi/ui';
 import { ErrorBoundary } from '@pi/ui';
+import { FileTree } from '@pi/ui';
+import { Separator } from '@pi/ui';
 import { TabsContent } from '@pi/ui';
+import { Button } from '@pi/ui';
+import { ProviderSettings } from '@pi/ui';
+
+const SettingsIcon = () => (
+  <svg className="h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,26 +45,14 @@ const queryClient = new QueryClient({
   },
 });
 
-const DEFAULT_SKILLS: Skill[] = [
-  { id: 'skill-filesystem', name: 'filesystem', description: 'Access and manage local files', category: 'filesystem', enabled: true },
-  { id: 'skill-officecli', name: 'officecli', description: 'Create and edit Office documents', category: 'document', enabled: true },
-  { id: 'skill-graphify', name: 'graphify', description: 'Build knowledge graphs from code', category: 'code', enabled: true },
-  { id: 'skill-ui-ux-pro-max', name: 'ui-ux-pro-max', description: 'UI/UX design intelligence', category: 'code', enabled: true },
-];
-
 function AppContent() {
   useTheme();
   const sdk = useSDK();
-  const queryClient = useQueryClient();
 
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const rightPanelActiveTab = useUIStore((s) => s.rightPanelActiveTab);
   const setRightPanelTab = useUIStore((s) => s.setRightPanelTab);
-  const compactMode = useUIStore((s) => s.compactMode);
-  const setCompactMode = useUIStore((s) => s.setCompactMode);
-  const selectedSkills = useUIStore((s) => s.selectedSkills);
-  const toggleSkill = useUIStore((s) => s.toggleSkill);
   const connectionStatus = useUIStore((s) => s.connectionStatus);
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus);
 
@@ -70,17 +64,6 @@ function AppContent() {
     });
   }, [sdk, setConnectionStatus]);
 
-  const { data: config } = useQuery({
-    queryKey: ['config'],
-    queryFn: () => sdk.config.get(),
-    enabled: connectionStatus === 'connected',
-  });
-
-  const updateConfigMut = useMutation({
-    mutationFn: (data: Partial<Config>) => sdk.config.update(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['config'] }),
-  });
-
   return (
     <TooltipProvider delayDuration={300}>
       <AppShell>
@@ -88,17 +71,6 @@ function AppContent() {
           <WorkspaceDropdown />
           <WorkspaceCreateDialog />
           <div className="flex-1" />
-          <ModelSelector
-            value={config?.defaultModelId ?? ''}
-            onChange={(modelId) => updateConfigMut.mutate({ defaultModelId: modelId })}
-          />
-          <ThinkLevelSelector
-            value={config?.defaultThinkLevel}
-            onChange={(level) => updateConfigMut.mutate({ defaultThinkLevel: level })}
-          />
-          <CompactToggle compact={compactMode} onToggle={setCompactMode} />
-          <SkillSelector skills={DEFAULT_SKILLS} selectedIds={selectedSkills} onToggle={toggleSkill} />
-          <div className="h-4 w-px bg-border mx-1" />
           <UsageStatistics />
         </TopControlPanel>
         <ThreeColumnLayout
@@ -106,7 +78,24 @@ function AppContent() {
           rightPanelOpen={rightPanelOpen}
           leftSidebar={
             <LeftSidebar>
-              <SessionList />
+              <div className="flex flex-col min-h-0 flex-1 p-2 gap-0">
+                <div className="max-h-[45%] overflow-auto flex-shrink-0">
+                  <FileTree />
+                </div>
+                <Separator className="my-1" />
+                <SessionList />
+              </div>
+              <div className="p-2 border-t">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-muted-foreground hover:text-foreground"
+                  onClick={() => setRightPanelTab('settings')}
+                >
+                  <SettingsIcon />
+                  设置
+                </Button>
+              </div>
             </LeftSidebar>
           }
           centerPanel={
@@ -122,6 +111,9 @@ function AppContent() {
               </TabsContent>
               <TabsContent value="diff" className="h-full mt-0">
                 <DiffReview />
+              </TabsContent>
+              <TabsContent value="settings" className="h-full mt-0">
+                <ProviderSettings />
               </TabsContent>
             </RightPanel>
           }
