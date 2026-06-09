@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, DragEvent } from 'react';
+import { useCallback, useMemo, useState, useRef, useEffect, DragEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Square, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,14 @@ import { CompactToggle } from '../model/compact-toggle';
 import { DEFAULT_SLASH_COMMANDS } from '@pi/sdk-wrapper';
 import type { ContentBlock, Config, Skill } from '@pi/types';
 import type { Attachment } from '@pi/types';
+
+/** Like Array.findLastIndex but works on all ContentBlock arrays */
+function findLastIndex<T>(arr: T[], predicate: (item: T) => boolean): number {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i])) return i;
+  }
+  return -1;
+}
 
 const DEFAULT_SKILLS: Skill[] = [
   { id: 'skill-filesystem', name: 'filesystem', description: 'Access and manage local files', category: 'filesystem', enabled: true },
@@ -65,6 +73,8 @@ export function Composer() {
     setSessionStats,
     setMessageTiming,
     setToolTiming,
+    setStreamError,
+    triggerSend,
   } = useComposerStore();
 
   // Highlighted index for keyboard navigation in popup menus
@@ -205,12 +215,27 @@ export function Composer() {
     }
   }, [sdk, activeSessionId, setIsStreaming]);
 
+  // Watch for retry trigger from ChatTimeline
+  useEffect(() => {
+    if (triggerSend > 0 && activeSessionId) {
+      const currentValue = useComposerStore.getState().value;
+      if (currentValue.trim()) {
+        sendMutation.mutate(currentValue);
+      }
+    }
+  }, [triggerSend]);
+
+  // Store last user message for potential retry
+  const lastUserMessageRef = useRef<string>('');
+
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!activeSessionId) return;
+      lastUserMessageRef.current = content;
       clearStreamingBlocks();
       setMessageTiming(null);
       setSessionStats(null);
+      setStreamError(null);
       setIsStreaming(true);
 
       // Collect image attachments with base64 data read
@@ -219,61 +244,78 @@ export function Composer() {
         .filter((a) => a.type === 'image' && a.data)
         .map((a) => ({ name: a.name, mimeType: a.mimeType, data: a.data! }));
 
-      try {
-        await sdk.chat.sendMessageStream(
-          {
-            sessionId: activeSessionId,
-            content,
-            workspaceCwd: activeWorkspaceId ?? undefined,
-            modelId: config?.defaultModelId,
-            attachments: imageAttachments.length > 0 ? imageAttachments : undefined,
-          },
-          (chunk) => {
-            if (chunk.type === 'block' && chunk.block) {
-              addStreamingBlock(chunk.block as ContentBlock);
-            } else if (chunk.type === 'text' && chunk.content) {
+      await sdk.chat.sendMessageStream(
+        {
+          sessionId: activeSessionId,
+          content,
+          workspaceCwd: activeWorkspaceId ?? undefined,
+          modelId: config?.defaultModelId,
+          attachments: imageAttachments.length > 0 ? imageAttachments : undefined,
+        },
+        (chunk) => {
+          if (chunk.type === 'block' && chunk.block) {
+            const block = chunk.block as ContentBlock;
+            // Text blocks from SDK carry the full accumulated text with a new ID
+            // each time. Merge into the last text block (which may not be the
+            // last overall block if thinking/tool_call blocks arrived since).
+            if (block.type === 'text') {
               const blocks = useComposerStore.getState().streamingBlocks;
-              const lastBlock = blocks[blocks.length - 1];
-              if (lastBlock && lastBlock.type === 'text') {
-                updateStreamingBlock(lastBlock.id, {
-                  content: lastBlock.content + chunk.content,
-                });
+              const lastTextIdx = findLastIndex(blocks, (b) => b.type === 'text');
+              if (lastTextIdx >= 0) {
+                updateStreamingBlock(blocks[lastTextIdx].id, { content: block.content });
               } else {
-                addStreamingBlock({
-                  id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                  type: 'text',
-                  content: chunk.content,
-                });
+                addStreamingBlock(block);
               }
-            } else if (chunk.type === 'usage' && chunk.usage) {
-              setStreamingUsage(chunk.usage);
-            } else if (chunk.type === 'context' && chunk.contextUsage) {
-              setContextUsage(chunk.contextUsage);
-            } else if (chunk.type === 'stats' && chunk.sessionStats) {
-              setSessionStats(chunk.sessionStats);
-            } else if (chunk.type === 'message_timing' && chunk.messageTiming) {
-              setMessageTiming(chunk.messageTiming);
-            } else if (chunk.type === 'tool_timing' && chunk.toolTiming) {
-              setToolTiming(chunk.toolTiming);
-            } else if (chunk.type === 'error') {
+            } else {
+              addStreamingBlock(block);
+            }
+          } else if (chunk.type === 'text' && chunk.content) {
+            const blocks = useComposerStore.getState().streamingBlocks;
+            const lastTextIdx = findLastIndex(blocks, (b) => b.type === 'text');
+            if (lastTextIdx >= 0) {
+              updateStreamingBlock(blocks[lastTextIdx].id, {
+                content: blocks[lastTextIdx].content + chunk.content,
+              });
+            } else {
               addStreamingBlock({
-                id: `err_${Date.now()}`,
+                id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
                 type: 'text',
-                content: `[错误] ${chunk.error || '未知错误'}`,
+                content: chunk.content,
               });
             }
-          },
-        );
-      } finally {
-        setIsStreaming(false);
-        clearStreamingBlocks();
-      }
+          } else if (chunk.type === 'usage' && chunk.usage) {
+            setStreamingUsage(chunk.usage);
+          } else if (chunk.type === 'context' && chunk.contextUsage) {
+            setContextUsage(chunk.contextUsage);
+          } else if (chunk.type === 'stats' && chunk.sessionStats) {
+            setSessionStats(chunk.sessionStats);
+          } else if (chunk.type === 'message_timing' && chunk.messageTiming) {
+            setMessageTiming(chunk.messageTiming);
+          } else if (chunk.type === 'tool_timing' && chunk.toolTiming) {
+            setToolTiming(chunk.toolTiming);
+          } else if (chunk.type === 'error') {
+            setStreamError(chunk.error || 'An unknown error occurred');
+          }
+        },
+      );
     },
     onSuccess: () => {
       setValue('');
       clearAttachments();
-      queryClient.refetchQueries({ queryKey: ['session', activeSessionId] });
+      // Refetch the session first while streaming blocks remain visible.
+      // Only clear streaming state after the real message arrives in cache
+      // to avoid a content flash during the transition.
+      setTimeout(async () => {
+        await queryClient.refetchQueries({ queryKey: ['session', activeSessionId] });
+        clearStreamingBlocks();
+        setIsStreaming(false);
+      }, 100);
       queryClient.invalidateQueries({ queryKey: ['files'] });
+    },
+    onError: (error: Error) => {
+      setStreamError(error.message || 'Failed to send message');
+      clearStreamingBlocks();
+      setIsStreaming(false);
     },
   });
 

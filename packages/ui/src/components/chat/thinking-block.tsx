@@ -11,13 +11,25 @@ interface ThinkingBlockProps {
 
 export function ThinkingBlock({ block, isStreaming }: ThinkingBlockProps) {
   const [expanded, setExpanded] = useState(false);
+  const [userCollapsed, setUserCollapsed] = useState(false);
 
-  // Auto-expand when new thinking content arrives during streaming
+  // Auto-expand when new thinking content arrives during streaming,
+  // but only if the user hasn't manually collapsed it
   useEffect(() => {
-    if (isStreaming && block.thinking) {
+    if (isStreaming && block.thinking && !userCollapsed) {
       setExpanded(true);
     }
-  }, [block.thinking, isStreaming]);
+  }, [block.thinking, isStreaming, userCollapsed]);
+
+  const handleToggle = () => {
+    if (expanded) {
+      setExpanded(false);
+      setUserCollapsed(true);
+    } else {
+      setExpanded(true);
+      setUserCollapsed(false);
+    }
+  };
 
   const duration = block.duration
     ? block.duration >= 1000
@@ -33,7 +45,7 @@ export function ThinkingBlock({ block, isStreaming }: ThinkingBlockProps) {
     )}>
       <button
         className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20"
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
       >
         {expanded ? (
           <ChevronDown className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />

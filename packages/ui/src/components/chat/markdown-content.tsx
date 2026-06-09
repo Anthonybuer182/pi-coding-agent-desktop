@@ -1,13 +1,84 @@
+import { useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
+import { Check, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import './chat-animations.css';
 
 interface MarkdownContentProps {
   content: string;
   isStreaming?: boolean;
+}
+
+function CodeBlock({ children, className }: { children?: React.ReactNode; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    const text = extractText(children);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for environments without clipboard API
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [children]);
+
+  const language = className?.replace('language-', '') || '';
+
+  return (
+    <div className="group relative">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/60 border border-border rounded-t-md border-b-0">
+        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+          {language || 'code'}
+        </span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+          aria-label={copied ? 'Copied' : 'Copy code'}
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3 text-emerald-500" />
+              Copied!
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" />
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="!mt-0 !rounded-t-none">
+        <code className={className}>{children}</code>
+      </pre>
+    </div>
+  );
+}
+
+/** Recursively extract text content from React children */
+function extractText(children: React.ReactNode): string {
+  if (typeof children === 'string') return children;
+  if (typeof children === 'number') return String(children);
+  if (!children) return '';
+  if (Array.isArray(children)) return children.map(extractText).join('');
+  if (typeof children === 'object' && 'props' in children) {
+    return extractText((children as React.ReactElement<{ children?: React.ReactNode }>).props.children);
+  }
+  return '';
 }
 
 export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) {
@@ -28,6 +99,38 @@ export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) 
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
+        components={{
+          pre: ({ children }) => <>{children}</>,
+          code: ({ className, children, ...props }) => {
+            const match = /language-/.exec(className || '');
+            const isInline = !match;
+            const codeContent = children as React.ReactNode;
+
+            if (isInline) {
+              return (
+                <code className={className} {...props}>
+                  {codeContent}
+                </code>
+              );
+            }
+
+            return (
+              <CodeBlock className={className}>
+                {codeContent}
+              </CodeBlock>
+            );
+          },
+          a: ({ children, href, ...props }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              {...props}
+            >
+              {children}
+            </a>
+          ),
+        }}
       >
         {content}
       </ReactMarkdown>

@@ -192,8 +192,17 @@ export function createRealChatService(cwd: string): ChatService {
               if (Array.isArray(content)) {
                 for (const block of content) {
                   if (block.type === 'text' && block.text) {
-                    outputText += block.text;
-                    safeChunk({ type: 'text', content: block.text });
+                    // block.text carries the full accumulated text, not a delta.
+                    // Send as block type so the composer replaces instead of appends.
+                    outputText = block.text;
+                    safeChunk({
+                      type: 'block',
+                      block: {
+                        id: `bt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                        type: 'text',
+                        content: block.text,
+                      },
+                    });
                   } else if (block.type === 'thinking') {
                     safeChunk({
                       type: 'block',

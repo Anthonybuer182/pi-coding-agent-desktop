@@ -12,13 +12,14 @@ interface ComposerState {
   mentionQuery: string;
   pendingAttachments: Attachment[];
   uploadProgress: Record<string, number>;
-  abortController: AbortController | null;
   streamingBlocks: ContentBlock[];
   streamingUsage: TokenUsage | null;
   contextUsage: ContextUsageInfo | null;
   sessionStats: SessionStatsInfo | null;
   messageTiming: MessageTiming | null;
   toolTimings: Map<string, number>;
+  streamError: string | null;
+  triggerSend: number;
 
   setValue: (value: string) => void;
   setCursorPosition: (pos: number) => void;
@@ -32,7 +33,6 @@ interface ComposerState {
   removeAttachment: (id: string) => void;
   setUploadProgress: (id: string, progress: number) => void;
   clearUploadProgress: () => void;
-  setAbortController: (controller: AbortController | null) => void;
   clearAttachments: () => void;
   addStreamingBlock: (block: ContentBlock) => void;
   updateStreamingBlock: (id: string, updates: Partial<ContentBlock>) => void;
@@ -42,6 +42,8 @@ interface ComposerState {
   setSessionStats: (stats: SessionStatsInfo | null) => void;
   setMessageTiming: (timing: MessageTiming | null) => void;
   setToolTiming: (timing: ToolTiming) => void;
+  setStreamError: (error: string | null) => void;
+  setTriggerSend: (content: string) => void;
   reset: () => void;
 }
 
@@ -56,13 +58,14 @@ export const useComposerStore = create<ComposerState>((set) => ({
   mentionQuery: '',
   pendingAttachments: [],
   uploadProgress: {},
-  abortController: null,
   streamingBlocks: [],
   streamingUsage: null,
   contextUsage: null,
   sessionStats: null,
   messageTiming: null,
   toolTimings: new Map(),
+  streamError: null,
+  triggerSend: 0,
 
   setSessionStats: (sessionStats) => set({ sessionStats }),
   setMessageTiming: (messageTiming) => set({ messageTiming }),
@@ -90,10 +93,19 @@ export const useComposerStore = create<ComposerState>((set) => ({
   setUploadProgress: (id, progress) =>
     set((s) => ({ uploadProgress: { ...s.uploadProgress, [id]: progress } })),
   clearUploadProgress: () => set({ uploadProgress: {} }),
-  setAbortController: (abortController) => set({ abortController }),
   clearAttachments: () => set({ pendingAttachments: [], uploadProgress: {} }),
   addStreamingBlock: (block) =>
-    set((s) => ({ streamingBlocks: [...s.streamingBlocks, block] })),
+    set((s) => {
+      const idx = s.streamingBlocks.findIndex((b) => b.id === block.id);
+      if (idx >= 0) {
+        // Replace existing block with the latest snapshot (avoids duplication
+        // when SDK re-sends the same block ID with accumulated content)
+        const updated = [...s.streamingBlocks];
+        updated[idx] = block;
+        return { streamingBlocks: updated };
+      }
+      return { streamingBlocks: [...s.streamingBlocks, block] };
+    }),
   updateStreamingBlock: (id, updates) =>
     set((s) => ({
       streamingBlocks: s.streamingBlocks.map((b) =>
@@ -103,6 +115,8 @@ export const useComposerStore = create<ComposerState>((set) => ({
   clearStreamingBlocks: () => set({ streamingBlocks: [] }),
   setStreamingUsage: (streamingUsage) => set({ streamingUsage }),
   setContextUsage: (contextUsage) => set({ contextUsage }),
+  setStreamError: (streamError) => set({ streamError }),
+  setTriggerSend: (content) => set((s) => ({ value: content, triggerSend: s.triggerSend + 1 })),
   reset: () =>
     set({
       value: '',
@@ -115,12 +129,13 @@ export const useComposerStore = create<ComposerState>((set) => ({
       mentionQuery: '',
       pendingAttachments: [],
       uploadProgress: {},
-      abortController: null,
       streamingBlocks: [],
       streamingUsage: null,
       contextUsage: null,
       sessionStats: null,
       messageTiming: null,
       toolTimings: new Map(),
+      streamError: null,
+      triggerSend: 0,
     }),
 }));

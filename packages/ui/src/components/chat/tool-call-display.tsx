@@ -34,15 +34,26 @@ function formatPreview(args: Record<string, unknown> | undefined): string {
 
 export function ToolCallDisplay({ block, result, isStreaming, durationMs }: ToolCallDisplayProps) {
   const [expanded, setExpanded] = useState(false);
+  const [userCollapsed, setUserCollapsed] = useState(false);
   const isRunning = isStreaming && !result;
   const hasError = result?.isError;
 
-  // Auto-expand during streaming
+  // Auto-expand during streaming, but only if user hasn't manually collapsed
   useEffect(() => {
-    if (isStreaming && block.args) {
+    if (isStreaming && block.args && !userCollapsed) {
       setExpanded(true);
     }
-  }, [isStreaming, block.args]);
+  }, [isStreaming, block.args, userCollapsed]);
+
+  const handleToggle = () => {
+    if (expanded) {
+      setExpanded(false);
+      setUserCollapsed(true);
+    } else {
+      setExpanded(true);
+      setUserCollapsed(false);
+    }
+  };
 
   return (
     <div className={cn(
@@ -56,7 +67,7 @@ export function ToolCallDisplay({ block, result, isStreaming, durationMs }: Tool
     )}>
       <button
         className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20"
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
       >
         {expanded ? (
           <ChevronDown className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
