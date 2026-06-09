@@ -328,14 +328,39 @@ export function Composer() {
     onSuccess: () => {
       setValue('');
       clearAttachments();
-      // Refetch the session first while streaming blocks remain visible.
-      // Only clear streaming state after the real message arrives in cache
-      // to avoid a content flash during the transition.
-      setTimeout(async () => {
-        await queryClient.refetchQueries({ queryKey: ['session', activeSessionId] });
-        clearStreamingBlocks();
-        setIsStreaming(false);
-      }, 100);
+
+      // Promote the streaming data into the query cache as a real message.
+      // No refetch needed – the streaming content IS the final content.
+      // All state changes happen synchronously, batched by React 18 → no flash.
+      const state = useComposerStore.getState();
+      const blocks = state.streamingBlocks;
+      const content = blocks.filter((b) => b.type === 'text').map((b) => b.content).join('');
+      const now = new Date().toISOString();
+
+      queryClient.setQueryData(['session', activeSessionId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: [
+            ...(old.messages || []),
+            {
+              id: `msg-${activeSessionId}-${Date.now()}`,
+              sessionId: activeSessionId,
+              role: 'assistant',
+              status: 'complete',
+              modelId: config?.defaultModelId ?? 'unknown',
+              content,
+              blocks,
+              usage: state.streamingUsage ?? undefined,
+              createdAt: now,
+              updatedAt: now,
+            },
+          ],
+        };
+      });
+
+      clearStreamingBlocks();
+      setIsStreaming(false);
       queryClient.invalidateQueries({ queryKey: ['files'] });
     },
     onError: (error: Error, _content: string, context: any) => {

@@ -135,15 +135,8 @@ export function ChatTimeline() {
   }
 
   // During streaming with live blocks, append them as a synthetic message.
-  // Guard: if the real assistant message has already been persisted (e.g. after
-  // refetch), suppress the streaming overlay to avoid flicker/duplication.
   const messages = useMemo(() => {
     if (isStreaming && streamingBlocks.length > 0) {
-      const lastStored = storedMessages[storedMessages.length - 1];
-      if (lastStored?.role === 'assistant' && lastStored.id !== '__streaming__') {
-        // Real message already available – don't show the streaming copy
-        return storedMessages;
-      }
       const createdAt = streamingStartRef.current || new Date().toISOString();
       return [...storedMessages, makeStreamingMessage(streamingBlocks, streamingUsage ?? undefined, createdAt)];
     }
