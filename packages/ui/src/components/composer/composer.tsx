@@ -229,6 +229,32 @@ export function Composer() {
   const lastUserMessageRef = useRef<string>('');
 
   const sendMutation = useMutation({
+    onMutate: async (content: string) => {
+      // Cancel outgoing refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['session', activeSessionId] });
+      const previousSession = queryClient.getQueryData(['session', activeSessionId]);
+      // Optimistically show the user message immediately
+      queryClient.setQueryData(['session', activeSessionId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: [
+            ...(old.messages || []),
+            {
+              id: `optimistic-${Date.now()}`,
+              sessionId: activeSessionId,
+              role: 'user',
+              status: 'complete',
+              content,
+              blocks: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        };
+      });
+      return { previousSession };
+    },
     mutationFn: async (content: string) => {
       if (!activeSessionId) return;
       lastUserMessageRef.current = content;
@@ -312,7 +338,11 @@ export function Composer() {
       }, 100);
       queryClient.invalidateQueries({ queryKey: ['files'] });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, _content: string, context: any) => {
+      // Rollback optimistic user message
+      if (context?.previousSession) {
+        queryClient.setQueryData(['session', activeSessionId], context.previousSession);
+      }
       setStreamError(error.message || 'Failed to send message');
       clearStreamingBlocks();
       setIsStreaming(false);
