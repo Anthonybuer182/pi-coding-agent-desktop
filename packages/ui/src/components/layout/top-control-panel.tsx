@@ -8,12 +8,7 @@ interface TopControlPanelProps {
 
 export function TopControlPanel({ children, className }: TopControlPanelProps) {
   return (
-    <div
-      className={cn(
-        'flex h-12 items-center gap-2 border-b bg-background px-4 shrink-0',
-        className,
-      )}
-    >
+    <div className={cn('flex items-center gap-2 px-4', className)}>
       {children}
     </div>
   );

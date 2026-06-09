@@ -4,3 +4,4 @@ export { TopControlPanel } from './top-control-panel';
 export { LeftSidebar } from './left-sidebar';
 export { CenterPanel } from './center-panel';
 export { RightPanel } from './right-panel';
+export { RightPanelTabs } from './right-panel-tabs';

@@ -9,23 +9,22 @@ import {
   TooltipProvider,
 } from '@pi/ui';
 import { AppShell } from '@pi/ui';
-import { TopControlPanel } from '@pi/ui';
 import { ThreeColumnLayout } from '@pi/ui';
 import { LeftSidebar } from '@pi/ui';
 import { CenterPanel } from '@pi/ui';
 import { RightPanel } from '@pi/ui';
+import { RightPanelTabs } from '@pi/ui';
 import { WorkspaceDropdown } from '@pi/ui';
 import { WorkspaceCreateDialog } from '@pi/ui';
 import { SessionList } from '@pi/ui';
 import { ChatTimeline } from '@pi/ui';
 import { Composer } from '@pi/ui';
+import { UsageBar } from '@pi/ui';
 import { DocumentPreview } from '@pi/ui';
 import { DiffReview } from '@pi/ui';
-import { UsageStatistics } from '@pi/ui';
 import { ErrorBoundary } from '@pi/ui';
 import { FileTree } from '@pi/ui';
 import { Separator } from '@pi/ui';
-import { TabsContent } from '@pi/ui';
 import { Button } from '@pi/ui';
 import { ProviderSettings } from '@pi/ui';
 
@@ -68,15 +67,21 @@ function AppContent() {
   return (
     <TooltipProvider delayDuration={300}>
       <AppShell>
-        <TopControlPanel>
-          <WorkspaceDropdown />
-          <WorkspaceCreateDialog />
-          <div className="flex-1" />
-          <UsageStatistics />
-        </TopControlPanel>
         <ThreeColumnLayout
           sidebarOpen={sidebarOpen}
           rightPanelOpen={rightPanelOpen}
+          topLeftContent={
+            <>
+              <WorkspaceDropdown />
+              <WorkspaceCreateDialog />
+            </>
+          }
+          rightPanelHeader={
+            <RightPanelTabs
+              activeTab={rightPanelActiveTab}
+              onTabChange={setRightPanelTab}
+            />
+          }
           leftSidebar={
             <LeftSidebar>
               <div className="flex flex-col min-h-0 flex-1 p-2 gap-0">
@@ -102,20 +107,15 @@ function AppContent() {
           centerPanel={
             <CenterPanel>
               <ChatTimeline />
+              <UsageBar />
               <Composer />
             </CenterPanel>
           }
           rightPanel={
-            <RightPanel activeTab={rightPanelActiveTab} onTabChange={setRightPanelTab}>
-              <TabsContent value="preview" className="h-full mt-0">
-                <DocumentPreview />
-              </TabsContent>
-              <TabsContent value="diff" className="h-full mt-0">
-                <DiffReview />
-              </TabsContent>
-              <TabsContent value="settings" className="h-full mt-0">
-                <ProviderSettings />
-              </TabsContent>
+            <RightPanel>
+              {rightPanelActiveTab === 'preview' && <DocumentPreview />}
+              {rightPanelActiveTab === 'diff' && <DiffReview />}
+              {rightPanelActiveTab === 'settings' && <ProviderSettings />}
             </RightPanel>
           }
         />

@@ -4,7 +4,6 @@ import { useSDK } from '@/hooks/use-sdk';
 import { useUIStore } from '@/stores/ui-store';
 import { useComposerStore } from '@/stores/composer-store';
 import { MessageBubble } from './message-bubble';
-import { SessionStatsBar } from './session-stats-bar';
 import { EmptyChat } from './empty-chat';
 import { Loader2 } from 'lucide-react';
 import { LoadingSpinner } from '@/components/common/loading-spinner';
@@ -38,7 +37,6 @@ export function ChatTimeline() {
   const streamingUsage = useComposerStore((s) => s.streamingUsage);
   const contextUsage = useComposerStore((s) => s.contextUsage);
   const messageTiming = useComposerStore((s) => s.messageTiming);
-  const toolTimings = useComposerStore((s) => s.toolTimings);
   const virtuosoRef = useRef<HTMLDivElement>(null);
 
   const { data: session, isLoading, error, refetch } = useQuery({
@@ -80,11 +78,6 @@ export function ChatTimeline() {
 
   return (
     <div className="flex flex-col flex-1">
-      {/* Top status bar: session-level cumulative metrics */}
-      <SessionStatsBar
-        messages={storedMessages}
-        contextUsage={contextUsage ?? undefined}
-      />
       <div className="flex-1" ref={virtuosoRef}>
         <Virtuoso
           data={messages}
@@ -98,7 +91,7 @@ export function ChatTimeline() {
                 isStreaming={isStreaming && isLast && isAssistant}
                 contextUsage={isLast ? contextUsage ?? undefined : undefined}
                 messageTiming={isLast && isAssistant ? messageTiming ?? undefined : undefined}
-                toolTimings={isStreaming ? toolTimings : new Map()}
+                toolTimings={new Map()}
               />
             );
           }}

@@ -34,7 +34,7 @@ export { useMediaQuery } from './hooks/use-media-query';
 export { useKeyboardShortcut } from './hooks/use-keyboard-shortcut';
 export { useResizeObserver } from './hooks/use-resize-observer';
 
-export { AppShell, ThreeColumnLayout, TopControlPanel, LeftSidebar, CenterPanel, RightPanel } from './components/layout';
+export { AppShell, ThreeColumnLayout, TopControlPanel, LeftSidebar, CenterPanel, RightPanel, RightPanelTabs } from './components/layout';
 export { WorkspaceDropdown, WorkspaceCreateDialog } from './components/workspace';
 export { SessionList, SessionItem, SessionCreateButton, SessionGroupHeader } from './components/session';
 export { ChatTimeline, MessageBubble, ThinkingBlock, ToolCallDisplay, ToolResultDisplay, EmptyChat, StreamingIndicator } from './components/chat';
@@ -43,6 +43,6 @@ export { DocumentPreview, CodeEditor, MarkdownPreview, ImagePreview, PDFPreview,
 export { DiffReview, DiffLine, DiffHunk, DiffHeader, AcceptRejectControls, EmptyDiff } from './components/diff';
 export { ModelSelector, ThinkLevelSelector, CompactToggle, SkillSelector } from './components/model';
 export { ProviderSettings } from './components/settings';
-export { UsageStatistics } from './components/usage';
+export { UsageBar } from './components/usage';
 export { ErrorBoundary, LoadingSpinner, EmptyState, ErrorState, ConfirmDialog } from './components/common';
 export { FileTree, FileTreeNode } from './components/file';
