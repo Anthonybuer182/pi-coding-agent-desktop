@@ -17,6 +17,7 @@ import { RightPanelTabs } from '@pi/ui';
 import { WorkspaceDropdown } from '@pi/ui';
 import { WorkspaceCreateDialog } from '@pi/ui';
 import { SessionList } from '@pi/ui';
+import { SessionTree } from '@pi/ui';
 import { ChatTimeline } from '@pi/ui';
 import { Composer } from '@pi/ui';
 import { UsageBar } from '@pi/ui';
@@ -52,6 +53,7 @@ function AppContent() {
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
   const rightPanelActiveTab = useUIStore((s) => s.rightPanelActiveTab);
   const setRightPanelTab = useUIStore((s) => s.setRightPanelTab);
+  const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const connectionStatus = useUIStore((s) => s.connectionStatus);
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus);
 
@@ -70,6 +72,7 @@ function AppContent() {
         <ThreeColumnLayout
           sidebarOpen={sidebarOpen}
           rightPanelOpen={rightPanelOpen}
+          onToggleRightPanel={toggleRightPanel}
           topLeftContent={
             <>
               <WorkspaceDropdown />
@@ -115,6 +118,7 @@ function AppContent() {
             <RightPanel>
               {rightPanelActiveTab === 'preview' && <DocumentPreview />}
               {rightPanelActiveTab === 'diff' && <DiffReview />}
+              {rightPanelActiveTab === 'session-tree' && <SessionTree />}
               {rightPanelActiveTab === 'settings' && <ProviderSettings />}
             </RightPanel>
           }

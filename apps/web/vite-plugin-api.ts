@@ -206,6 +206,7 @@ async function handleRequest(server: ViteDevServer, method: string, params: any)
         case 'archive': return sessionService.archive(params.id);
         case 'unarchive': return sessionService.unarchive(params.id);
         case 'updateTitle': return sessionService.updateTitle(params.id, params.title);
+        case 'getTree': return sessionService.getTree(params.id);
       }
       break;
 

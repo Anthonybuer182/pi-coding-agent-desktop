@@ -1,4 +1,4 @@
-import type { Session, SessionWithMessages } from '@pi/types';
+import type { Session, SessionWithMessages, SessionTreeResult } from '@pi/types';
 
 export interface SessionService {
   list(workspaceId: string): Promise<Session[]>;
@@ -8,4 +8,5 @@ export interface SessionService {
   archive(id: string): Promise<Session>;
   unarchive(id: string): Promise<Session>;
   updateTitle(id: string, title: string): Promise<Session>;
+  getTree(id: string): Promise<SessionTreeResult>;
 }

@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 
 interface ThreeColumnLayoutProps {
@@ -12,6 +14,8 @@ interface ThreeColumnLayoutProps {
   topLeftContent?: ReactNode;
   /** Header content for the right panel (tabs). Only rendered when rightPanelOpen. */
   rightPanelHeader?: ReactNode;
+  /** Callback when the right panel toggle button is clicked. */
+  onToggleRightPanel?: () => void;
   leftWidth?: number;
   rightWidth?: number;
   minLeftWidth?: number;
@@ -28,6 +32,7 @@ export function ThreeColumnLayout({
   rightPanel,
   topLeftContent,
   rightPanelHeader,
+  onToggleRightPanel,
   leftWidth = 260,
   rightWidth = 400,
   minLeftWidth = 200,
@@ -103,6 +108,21 @@ export function ThreeColumnLayout({
             <div className="flex-1 flex items-center gap-2 px-4">
               {topLeftContent}
             </div>
+          )}
+          {onToggleRightPanel && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 mr-1 text-muted-foreground hover:text-foreground"
+              onClick={onToggleRightPanel}
+              title={rightPanelOpen ? '折叠右侧面板' : '展开右侧面板'}
+            >
+              {rightPanelOpen ? (
+                <PanelRightClose className="h-4 w-4" />
+              ) : (
+                <PanelRightOpen className="h-4 w-4" />
+              )}
+            </Button>
           )}
         </div>
 

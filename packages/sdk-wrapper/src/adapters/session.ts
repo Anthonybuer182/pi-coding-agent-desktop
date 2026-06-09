@@ -1,4 +1,4 @@
-import type { Session, SessionWithMessages, Message, ContentBlock, AssistantMessage } from '@pi/types';
+import type { Session, SessionWithMessages, Message, ContentBlock, AssistantMessage, SessionTreeNode, SessionTreeResult, TreeNodeToolCall } from '@pi/types';
 import type { SessionService } from '../services/session.js';
 import {
   SessionManager,
@@ -196,6 +196,127 @@ function isSessionMessageEntry(e: SessionEntry): e is SessionMessageEntry {
   return e.type === 'message';
 }
 
+// === Conversion: SDK SessionTreeNode → our SessionTreeNode ===
+function extractPreview(entry: any): string | undefined {
+  if (entry.type === 'message' && entry.message) {
+    const msg = entry.message;
+    const content = typeof msg.content === 'string'
+      ? msg.content
+      : Array.isArray(msg.content)
+        ? msg.content.map((c: any) => (c.text || '')).join(' ')
+        : '';
+    return content.slice(0, 60);
+  }
+  if (entry.type === 'model_change') {
+    return `${entry.provider}/${entry.modelId}`;
+  }
+  if (entry.type === 'thinking_level_change') {
+    return entry.thinkingLevel || '';
+  }
+  if (entry.type === 'compaction' || entry.type === 'branch_summary') {
+    return (entry.summary || '').slice(0, 60);
+  }
+  if (entry.type === 'session_info' && entry.name) {
+    return entry.name;
+  }
+  if (entry.type === 'label') {
+    return entry.label || entry.targetId;
+  }
+  if (entry.type === 'custom' || entry.type === 'custom_message') {
+    return entry.customType || entry.type;
+  }
+  return undefined;
+}
+
+function extractToolAndThinking(msg: any): {
+  toolCount: number;
+  toolCalls: TreeNodeToolCall[];
+  hasThinking: boolean;
+  thinkingDuration?: number;
+} {
+  let toolCount = 0;
+  const toolCalls: TreeNodeToolCall[] = [];
+  let hasThinking = false;
+  let thinkingDuration: number | undefined;
+
+  const content = msg.content;
+  if (!Array.isArray(content)) return { toolCount, toolCalls, hasThinking };
+
+  for (const block of content) {
+    if (block.type === 'toolCall' || block.type === 'tool_call') {
+      toolCount++;
+      const args = block.args || block.input || {};
+      const argsPreview = typeof args === 'object'
+        ? JSON.stringify(args).slice(0, 80)
+        : String(args).slice(0, 80);
+      toolCalls.push({
+        toolCallId: block.toolCallId || `tc-${toolCount}`,
+        toolName: block.name || block.toolName || 'unknown',
+        argsPreview,
+      });
+    } else if (block.type === 'toolResult' || block.type === 'tool_result') {
+      // Match tool result to its call and add result info
+      const matchingCall = toolCalls.find((tc) => tc.toolCallId === block.toolCallId);
+      if (matchingCall) {
+        const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+        matchingCall.resultPreview = resultContent.slice(0, 100);
+        matchingCall.isError = block.isError;
+      }
+    } else if (block.type === 'thinking') {
+      hasThinking = true;
+      if (typeof block.duration === 'number') {
+        thinkingDuration = (thinkingDuration ?? 0) + block.duration;
+      }
+    }
+  }
+
+  return { toolCount, toolCalls, hasThinking, thinkingDuration };
+}
+
+function toSessionTreeNode(node: any): SessionTreeNode {
+  const entry = node.entry as any;
+  const result: SessionTreeNode = {
+    id: entry.id,
+    parentId: entry.parentId ?? null,
+    type: entry.type,
+    timestamp: entry.timestamp || '',
+    label: node.label,
+    children: (node.children || []).map(toSessionTreeNode),
+    preview: extractPreview(entry),
+  };
+
+  if (entry.type === 'message' && entry.message) {
+    result.role = entry.message.role === 'user' ? 'user' : 'assistant';
+    // Extract tool and thinking info from message content
+    if (entry.message.role === 'assistant') {
+      const info = extractToolAndThinking(entry.message);
+      if (info.toolCount > 0) {
+        result.toolCount = info.toolCount;
+        result.toolCalls = info.toolCalls;
+      }
+      if (info.hasThinking) {
+        result.hasThinking = true;
+        result.thinkingDuration = info.thinkingDuration;
+      }
+    }
+  }
+  if (entry.type === 'model_change') {
+    result.provider = entry.provider;
+    result.modelId = entry.modelId;
+  }
+  if (entry.type === 'thinking_level_change') {
+    result.thinkingLevel = entry.thinkingLevel;
+  }
+  if (entry.type === 'compaction' || entry.type === 'branch_summary') {
+    result.summary = entry.summary;
+  }
+  if (entry.type === 'custom' || entry.type === 'custom_message') {
+    result.customType = entry.customType;
+  }
+
+  return result;
+}
+
 export function createRealSessionService(): SessionService {
   return {
     async list(workspaceId: string): Promise<Session[]> {
@@ -287,6 +408,25 @@ export function createRealSessionService(): SessionService {
       } catch {
         throw new Error(`Session not found: ${id}`);
       }
+    },
+
+    async getTree(id: string): Promise<SessionTreeResult> {
+      let sm: SessionManager;
+      try {
+        sm = SessionManager.open(id);
+      } catch {
+        throw new Error(`Session not found: ${id}`);
+      }
+
+      const sdkNodes = sm.getTree();
+      const leafId = sm.getLeafId();
+      const nodes = sdkNodes.map(toSessionTreeNode);
+
+      return {
+        sessionId: sm.getSessionId(),
+        leafId,
+        nodes,
+      };
     },
   };
 }

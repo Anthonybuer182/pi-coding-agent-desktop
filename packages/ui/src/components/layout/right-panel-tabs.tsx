@@ -1,5 +1,5 @@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Settings } from 'lucide-react';
+import { Settings, GitBranch } from 'lucide-react';
 
 interface RightPanelTabsProps {
   activeTab?: string;
@@ -13,6 +13,10 @@ export function RightPanelTabs({ activeTab = 'preview', onTabChange }: RightPane
         <TabsList className="w-full">
           <TabsTrigger value="preview" className="flex-1">预览</TabsTrigger>
           <TabsTrigger value="diff" className="flex-1">差异</TabsTrigger>
+          <TabsTrigger value="session-tree" className="flex-1">
+            <GitBranch className="h-3 w-3 mr-1" />
+            会话树
+          </TabsTrigger>
           <TabsTrigger value="settings" className="flex-1">
             <Settings className="h-3 w-3 mr-1" />
             设置

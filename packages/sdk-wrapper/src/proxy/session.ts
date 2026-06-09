@@ -24,5 +24,8 @@ export function createProxySessionService(transport: Transport): SessionService 
     async updateTitle(id: string, title: string) {
       return transport.request('session.updateTitle', { id, title }) as ReturnType<SessionService['updateTitle']>;
     },
+    async getTree(id: string) {
+      return transport.request('session.getTree', { id }) as ReturnType<SessionService['getTree']>;
+    },
   };
 }
