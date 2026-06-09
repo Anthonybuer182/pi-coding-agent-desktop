@@ -93,7 +93,6 @@ export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) 
         'prose-ul:my-1 prose-ol:my-1 prose-li:my-0',
         'prose-table:text-xs prose-th:px-2 prose-th:py-1 prose-td:px-2 prose-td:py-1',
         'prose-blockquote:border-l-2 prose-blockquote:border-emerald-500 prose-blockquote:bg-emerald-50/30 prose-blockquote:py-1 prose-blockquote:pl-3 prose-blockquote:not-italic',
-        isStreaming && 'after:content-["▊"] after:animate-pulse after:text-emerald-500 after:ml-0.5',
       )}
     >
       <ReactMarkdown
