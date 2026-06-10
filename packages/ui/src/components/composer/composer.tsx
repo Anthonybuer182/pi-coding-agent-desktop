@@ -293,12 +293,13 @@ export function Composer() {
                 addStreamingBlock(block);
               }
             } else if (block.type === 'tool_call' || block.type === 'tool_result') {
-              // Deduplicate by toolCallId — SDK re-emits the accumulated
+              // Deduplicate by type+toolCallId — SDK re-emits the accumulated
               // content array on each message_update, so the same tool_call
-              // or tool_result can arrive with a new block ID.
+              // or tool_result can arrive with a new block ID. We MUST match
+              // the type so tool_result doesn't overwrite tool_call and vice versa.
               const blocks = useComposerStore.getState().streamingBlocks;
               const existingIdx = blocks.findIndex(
-                (b) => (b.type === 'tool_call' || b.type === 'tool_result') &&
+                (b) => b.type === block.type &&
                        (b as ContentBlock).toolCallId === block.toolCallId,
               );
               if (existingIdx >= 0 && block.toolCallId) {
@@ -347,7 +348,14 @@ export function Composer() {
       // No refetch needed – the streaming content IS the final content.
       // All state changes happen synchronously, batched by React 18 → no flash.
       const state = useComposerStore.getState();
-      const blocks = state.streamingBlocks;
+      // Merge toolTimings into blocks so durations persist across reloads
+      const blocks = state.streamingBlocks.map((b) => {
+        if (b.type === 'tool_call' && b.toolCallId) {
+          const ms = state.toolTimings.get(b.toolCallId);
+          if (ms != null) return { ...b, durationMs: ms };
+        }
+        return b;
+      });
       const content = blocks.filter((b) => b.type === 'text').map((b) => b.content).join('');
       const now = new Date().toISOString();
 

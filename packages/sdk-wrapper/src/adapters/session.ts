@@ -40,6 +40,19 @@ function toSession(info: SessionInfo): Session {
   };
 }
 
+/** Extract readable text from a content block or array of content blocks.
+ *  pi-ai ToolResultMessage.content is (TextContent | ImageContent)[], not a plain string. */
+function extractTextFromContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c: any) => c.type === 'text')
+      .map((c: any) => c.text || '')
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
+
 // === Conversion: AgentMessage → ContentBlock[] ===
 type AgentMessage = SessionMessageEntry['message'];
 
@@ -67,16 +80,17 @@ function agentMessageToBlocks(msg: any): ContentBlock[] {
             content: block.text || '',
           });
         } else if (block.type === 'toolCall' || block.type === 'tool_call') {
+          // pi-ai uses `arguments` (not `args` or `input`) and `id` (not `toolCallId`)
           blocks.push({
             id: `b-tool-${msg.timestamp || Date.now()}-${i}`,
             type: 'tool_call',
             content: `Calling ${block.name || block.toolName || 'tool'}`,
-            toolCallId: block.toolCallId || `tc-${i}`,
+            toolCallId: block.id || block.toolCallId || `tc-${i}`,
             toolName: block.name || block.toolName,
-            args: block.args || block.input || {},
+            args: block.arguments || block.args || block.input || {},
           });
         } else if (block.type === 'toolResult' || block.type === 'tool_result') {
-          const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+          const resultContent = extractTextFromContent(block.content);
           blocks.push({
             id: `b-tr-${msg.timestamp || Date.now()}-${i}`,
             type: 'tool_result',
@@ -102,8 +116,8 @@ function agentMessageToBlocks(msg: any): ContentBlock[] {
         content,
       });
     }
-  } else if (msg.role === 'tool_result') {
-    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+  } else if (msg.role === 'toolResult' || msg.role === 'tool_result') {
+    const content = extractTextFromContent(msg.content);
     blocks.push({
       id: `b-tr-${msg.timestamp || Date.now()}`,
       type: 'tool_result',
@@ -245,12 +259,13 @@ function extractToolAndThinking(msg: any): {
   for (const block of content) {
     if (block.type === 'toolCall' || block.type === 'tool_call') {
       toolCount++;
-      const args = block.args || block.input || {};
+      // pi-ai uses `arguments` (not `args`/`input`) and `id` (not `toolCallId`)
+      const args = block.arguments || block.args || block.input || {};
       const argsPreview = typeof args === 'object'
         ? JSON.stringify(args).slice(0, 80)
         : String(args).slice(0, 80);
       toolCalls.push({
-        toolCallId: block.toolCallId || `tc-${toolCount}`,
+        toolCallId: block.id || block.toolCallId || `tc-${toolCount}`,
         toolName: block.name || block.toolName || 'unknown',
         argsPreview,
       });

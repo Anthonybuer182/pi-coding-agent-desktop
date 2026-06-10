@@ -45,7 +45,7 @@ function renderBlocks(blocks: ContentBlock[], isStreaming: boolean, toolTimings:
       case 'tool_call': {
         const tcBlock = block as ToolCallBlock;
         const result = resultMap.get(tcBlock.toolCallId);
-        const toolMs = toolTimings.get(tcBlock.toolCallId);
+        const toolMs = toolTimings.get(tcBlock.toolCallId) ?? tcBlock.durationMs;
         elements.push(
           <ToolCallDisplay
             key={tcBlock.id}

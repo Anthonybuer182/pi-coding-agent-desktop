@@ -30,6 +30,7 @@ export interface ToolCallBlock extends ContentBlock {
   toolCallId: string;
   toolName: string;
   args: Record<string, unknown>;
+  durationMs?: number;
 }
 
 export interface ToolResultBlock extends ContentBlock {
