@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'connecting';
 
@@ -28,33 +29,49 @@ interface UIState {
   setSearchQuery: (query: string) => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
-  activeWorkspaceId: null,
-  activeSessionId: null,
-  activePreviewFilePath: null,
-  activeDiffId: null,
-  sidebarOpen: true,
-  rightPanelOpen: true,
-  rightPanelActiveTab: 'preview',
-  compactMode: false,
-  selectedSkills: ['skill-officecli', 'skill-filesystem'],
-  connectionStatus: 'connecting',
-  searchQuery: '',
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
+      activeWorkspaceId: null,
+      activeSessionId: null,
+      activePreviewFilePath: null,
+      activeDiffId: null,
+      sidebarOpen: true,
+      rightPanelOpen: true,
+      rightPanelActiveTab: 'preview',
+      compactMode: false,
+      selectedSkills: ['skill-officecli', 'skill-filesystem'],
+      connectionStatus: 'connecting',
+      searchQuery: '',
 
-  setActiveWorkspace: (id) => set({ activeWorkspaceId: id, activeSessionId: null }),
-  setActiveSession: (id) => set({ activeSessionId: id }),
-  setActivePreviewFile: (path) => set({ activePreviewFilePath: path, rightPanelActiveTab: 'preview' }),
-  setActiveDiff: (id) => set({ activeDiffId: id, rightPanelActiveTab: 'diff' }),
-  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
-  setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab as 'preview' | 'diff' | 'settings' | 'session-tree' }),
-  setCompactMode: (compact) => set({ compactMode: compact }),
-  toggleSkill: (skillId) =>
-    set((s) => ({
-      selectedSkills: s.selectedSkills.includes(skillId)
-        ? s.selectedSkills.filter((id) => id !== skillId)
-        : [...s.selectedSkills, skillId],
-    })),
-  setConnectionStatus: (status) => set({ connectionStatus: status }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
-}));
+      setActiveWorkspace: (id) => set({ activeWorkspaceId: id, activeSessionId: null }),
+      setActiveSession: (id) => set({ activeSessionId: id }),
+      setActivePreviewFile: (path) => set({ activePreviewFilePath: path, rightPanelActiveTab: 'preview' }),
+      setActiveDiff: (id) => set({ activeDiffId: id, rightPanelActiveTab: 'diff' }),
+      toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+      toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+      setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab as 'preview' | 'diff' | 'settings' | 'session-tree' }),
+      setCompactMode: (compact) => set({ compactMode: compact }),
+      toggleSkill: (skillId) =>
+        set((s) => ({
+          selectedSkills: s.selectedSkills.includes(skillId)
+            ? s.selectedSkills.filter((id) => id !== skillId)
+            : [...s.selectedSkills, skillId],
+        })),
+      setConnectionStatus: (status) => set({ connectionStatus: status }),
+      setSearchQuery: (query) => set({ searchQuery: query }),
+    }),
+    {
+      name: 'pi-ui-storage',
+      partialize: (state) => ({
+        activeWorkspaceId: state.activeWorkspaceId,
+        activeSessionId: state.activeSessionId,
+        sidebarOpen: state.sidebarOpen,
+        rightPanelOpen: state.rightPanelOpen,
+        rightPanelActiveTab: state.rightPanelActiveTab,
+        compactMode: state.compactMode,
+        selectedSkills: state.selectedSkills,
+      }),
+    },
+  ),
+);
