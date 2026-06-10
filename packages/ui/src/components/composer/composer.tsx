@@ -292,6 +292,20 @@ export function Composer() {
               } else {
                 addStreamingBlock(block);
               }
+            } else if (block.type === 'tool_call' || block.type === 'tool_result') {
+              // Deduplicate by toolCallId — SDK re-emits the accumulated
+              // content array on each message_update, so the same tool_call
+              // or tool_result can arrive with a new block ID.
+              const blocks = useComposerStore.getState().streamingBlocks;
+              const existingIdx = blocks.findIndex(
+                (b) => (b.type === 'tool_call' || b.type === 'tool_result') &&
+                       (b as ContentBlock).toolCallId === block.toolCallId,
+              );
+              if (existingIdx >= 0 && block.toolCallId) {
+                updateStreamingBlock(blocks[existingIdx].id, block);
+              } else {
+                addStreamingBlock(block);
+              }
             } else {
               addStreamingBlock(block);
             }

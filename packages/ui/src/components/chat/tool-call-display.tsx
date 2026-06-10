@@ -1,4 +1,4 @@
-import { Wrench, Loader2, ChevronDown, ChevronRight, Play, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { ToolCallBlock, ToolResultBlock } from '@pi/types';
@@ -11,25 +11,26 @@ interface ToolCallDisplayProps {
   durationMs?: number;
 }
 
-function formatArgs(args: Record<string, unknown> | undefined): string {
-  if (!args) return '';
-  try {
-    return JSON.stringify(args, null, 2);
-  } catch {
-    return String(args);
-  }
+function formatDuration(ms: number): string {
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${ms}ms`;
 }
 
-function formatPreview(args: Record<string, unknown> | undefined): string {
-  if (!args) return '';
-  // Show first meaningful key-value
-  const entries = Object.entries(args);
-  if (entries.length === 0) return '';
-  const [key, val] = entries[0];
-  const valStr = typeof val === 'string' && val.length > 40
-    ? val.slice(0, 40) + '...'
-    : String(val).slice(0, 40);
-  return `${key}=${valStr}`;
+function getToolPreview(block: ToolCallBlock): string {
+  const input = block.args;
+  if (!input || typeof input !== 'object') return '';
+  const keys = Object.keys(input);
+  if (keys.length === 0) return '';
+
+  if ('command' in input) return String(input.command).slice(0, 120);
+  if ('path' in input) return String(input.path).slice(0, 120);
+  if ('file_path' in input) return String(input.file_path).slice(0, 120);
+  if ('pattern' in input) return String(input.pattern).slice(0, 120);
+  if ('query' in input) return String(input.query).slice(0, 120);
+  if ('url' in input) return String(input.url).slice(0, 120);
+
+  const first = input[keys[0]];
+  return String(first).slice(0, 120);
 }
 
 export function ToolCallDisplay({ block, result, isStreaming, durationMs }: ToolCallDisplayProps) {
@@ -37,10 +38,17 @@ export function ToolCallDisplay({ block, result, isStreaming, durationMs }: Tool
   const [userCollapsed, setUserCollapsed] = useState(false);
   const isRunning = isStreaming && !result;
   const hasError = result?.isError;
+  const rawResult = result?.result;
+  const resultText = rawResult == null
+    ? ''
+    : typeof rawResult === 'string'
+      ? rawResult
+      : JSON.stringify(rawResult);
+  const resultIsEmpty = result ? (resultText.trim() === '' || resultText.trim() === '(empty)') : false;
 
-  // Auto-expand during streaming, but only if user hasn't manually collapsed
+  // Auto-expand during streaming when args arrive, unless user manually collapsed
   useEffect(() => {
-    if (isStreaming && block.args && !userCollapsed) {
+    if (isStreaming && block.args && Object.keys(block.args).length > 0 && !userCollapsed) {
       setExpanded(true);
     }
   }, [isStreaming, block.args, userCollapsed]);
@@ -55,84 +63,99 @@ export function ToolCallDisplay({ block, result, isStreaming, durationMs }: Tool
     }
   };
 
+  const preview = getToolPreview(block);
+
+  const statusColor = hasError
+    ? 'border-red-200/50 dark:border-red-800/30 bg-red-50/20 dark:bg-red-950/5'
+    : 'border-emerald-200/30 dark:border-emerald-800/20 bg-emerald-50/20 dark:bg-emerald-950/5';
+
   return (
     <div className={cn(
-      'my-1 rounded-md border-l-2 bg-emerald-50/50 dark:bg-emerald-950/20',
-      'animate-streaming-in',
+      'my-1 rounded-md border overflow-hidden text-xs animate-streaming-in',
       isRunning
-        ? 'border-emerald-400'
-        : hasError
-          ? 'border-red-500'
-          : 'border-emerald-500',
+        ? 'border-emerald-400/40 bg-emerald-50/30 dark:bg-emerald-950/10'
+        : statusColor,
     )}>
+      {/* ── Header row ── */}
       <button
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20"
+        className="flex w-full items-center gap-1.5 px-2.5 py-1.5 hover:bg-muted/30 text-left min-w-0"
         onClick={handleToggle}
       >
-        {expanded ? (
-          <ChevronDown className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        ) : (
-          <ChevronRight className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        )}
+        {/* Status icon */}
         {isRunning ? (
           <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
-        ) : result ? (
-          hasError ? (
-            <XCircle className="h-3 w-3 text-red-500 shrink-0" />
-          ) : (
-            <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          )
         ) : (
-          <Wrench className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className={cn(
+            'h-1.5 w-1.5 rounded-full shrink-0',
+            hasError ? 'bg-red-500' : 'bg-emerald-500',
+          )} />
         )}
-        <Play className="h-3 w-3 text-emerald-600/70 dark:text-emerald-400/70 shrink-0" />
-        <span className="font-medium text-emerald-700 dark:text-emerald-300">
+
+        {/* Tool name */}
+        <span className={cn(
+          'font-semibold font-mono text-[11px] shrink-0',
+          hasError ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-300',
+        )}>
           {block.toolName}
         </span>
-        {!expanded && block.args && (
-          <span className="text-muted-foreground/60 truncate">
-            {formatPreview(block.args)}
+
+        {/* Args preview (always visible, like reference) */}
+        {preview && (
+          <span className="text-muted-foreground/60 font-mono text-[11px] truncate flex-1 min-w-0">
+            {preview}
           </span>
         )}
-        {isRunning && (
-          <span className="ml-auto text-emerald-500/70 dark:text-emerald-400/50 animate-pulse shrink-0">
+
+        {/* Running indicator (only when collapsed) */}
+        {isRunning && !expanded && (
+          <span className="text-emerald-600/70 dark:text-emerald-400/50 animate-pulse shrink-0 ml-auto">
             running...
           </span>
         )}
+
+        {/* Duration */}
         {durationMs != null && !isRunning && (
-          <span className="ml-auto text-emerald-500/70 dark:text-emerald-400/50 shrink-0">
-            {durationMs >= 1000 ? `${(durationMs / 1000).toFixed(1)}s` : `${durationMs}ms`}
+          <span className="ml-auto text-muted-foreground/60 tabular-nums shrink-0">
+            {formatDuration(durationMs)}
           </span>
         )}
-      </button>
-      {expanded && (
-        <div className="border-t border-emerald-200 dark:border-emerald-800/50">
-          {block.args && (
-            <div className="px-3 py-2">
-              <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/60">
-                Input
-              </div>
-              <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
-                {formatArgs(block.args)}
-              </pre>
-            </div>
+
+        {/* Chevron */}
+        <svg
+          width="10" height="10" viewBox="0 0 10 10" fill="none"
+          stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+          className={cn(
+            'shrink-0 text-muted-foreground/50 transition-transform duration-150',
+            expanded ? 'rotate-180' : '',
           )}
+        >
+          <polyline points="2 3.5 5 6.5 8 3.5" />
+        </svg>
+      </button>
+
+      {/* ── Expanded: args + result ── */}
+      {expanded && (
+        <div className="border-t border-border/40">
+          {/* Input args */}
+          {block.args && Object.keys(block.args).length > 0 && (
+            <pre className="px-2.5 py-2 text-muted-foreground whitespace-pre-wrap font-mono text-[11px] leading-relaxed max-h-48 overflow-y-auto">
+              {JSON.stringify(block.args, null, 2)}
+            </pre>
+          )}
+
+          {/* Result — only shown when available and expanded (like reference) */}
           {result && (
-            <div className="px-3 py-2 border-t border-emerald-200/50 dark:border-emerald-800/30">
-              <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-emerald-600/70 dark:text-emerald-400/60">
-                Output
-              </div>
-              <pre className={cn(
-                'text-xs whitespace-pre-wrap font-mono max-h-64 overflow-y-auto',
-                hasError ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground',
-              )}>
-                {result.result
-                  ? result.result.length > 2000
-                    ? result.result.slice(0, 2000) + '\n... (truncated)'
-                    : result.result
-                  : '(empty)'}
-              </pre>
-            </div>
+            <pre className={cn(
+              'px-2.5 py-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed max-h-64 overflow-y-auto',
+              'border-t border-border/30',
+              hasError
+                ? 'text-red-600 dark:text-red-400 bg-red-50/10 dark:bg-red-950/5'
+                : resultIsEmpty
+                  ? 'text-muted-foreground/50 italic'
+                  : 'text-muted-foreground bg-muted/20',
+            )}>
+              {resultIsEmpty ? '(no output)' : resultText.length > 2000 ? resultText.slice(0, 2000) + '\n... (truncated)' : resultText}
+            </pre>
           )}
         </div>
       )}

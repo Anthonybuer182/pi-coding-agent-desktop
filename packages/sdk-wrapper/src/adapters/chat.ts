@@ -219,6 +219,8 @@ export function createRealChatService(cwd: string): ChatService {
                       },
                     });
                   } else if (block.type === 'toolCall' || block.type === 'tool_call') {
+                    // block.input carries tool arguments from the SDK
+                    const args = (block as any).input ?? (block as any).args;
                     safeChunk({
                       type: 'block',
                       block: {
@@ -227,6 +229,7 @@ export function createRealChatService(cwd: string): ChatService {
                         content: block.name || 'tool',
                         toolCallId: block.toolCallId,
                         toolName: block.name || block.toolName,
+                        args: typeof args === 'object' && args !== null ? args : undefined,
                       },
                     });
                   }
@@ -248,6 +251,7 @@ export function createRealChatService(cwd: string): ChatService {
                 content: event.toolName || 'tool execution',
                 toolCallId: event.toolCallId,
                 toolName: event.toolName,
+                args: (event as any).args ?? undefined,
               },
             });
             break;
@@ -257,15 +261,30 @@ export function createRealChatService(cwd: string): ChatService {
             const durationMs = startTime ? Date.now() - startTime : undefined;
             toolStartTimes.delete(event.toolCallId);
 
+            // event.result is { content: Array<{type, text}>, isError: boolean }
+            // Extract text from content blocks for display
+            const rawResult = (event as any).result;
+            let resultText: string;
+            if (rawResult && typeof rawResult === 'object' && Array.isArray(rawResult.content)) {
+              resultText = rawResult.content
+                .filter((c: any) => c.type === 'text')
+                .map((c: any) => c.text || '')
+                .join('\n');
+            } else if (typeof rawResult === 'string') {
+              resultText = rawResult;
+            } else {
+              resultText = String(rawResult ?? '');
+            }
+
             safeChunk({
               type: 'block',
               block: {
                 id: `b-ter-${Date.now()}`,
                 type: 'tool_result',
-                content: event.isError ? `Error: ${event.result}` : 'Done',
+                content: event.isError ? `Error: ${resultText}` : resultText || 'Done',
                 toolCallId: event.toolCallId,
-                result: event.result,
-                isError: event.isError,
+                result: resultText,
+                isError: (event as any).isError || rawResult?.isError || false,
               },
             });
 

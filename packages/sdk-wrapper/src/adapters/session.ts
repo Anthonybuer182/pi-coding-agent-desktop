@@ -340,9 +340,36 @@ export function createRealSessionService(): SessionService {
       const entries = sm.getEntries();
       const messageEntries = entries.filter(isSessionMessageEntry);
 
-      const messages: Message[] = messageEntries
-        .map((e, i) => toMessage(e.message, id, i))
-        .filter((m): m is Message => m !== null);
+      // Build messages, merging tool_result entries into their preceding assistant message.
+      // This ensures the renderBlocks pairing in message-bubble.tsx can correctly
+      // pair tool_call blocks with their results within a single message.
+      const messages: Message[] = [];
+      let msgIndex = 0;
+
+      for (const entry of messageEntries) {
+        const rawMsg = entry.message;
+
+        // Merge toolResult into the preceding assistant message
+        if (rawMsg.role === 'toolResult') {
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role === 'assistant') {
+            const toolBlocks = agentMessageToBlocks(rawMsg);
+            if (toolBlocks.length > 0) {
+              lastMsg.blocks.push(...toolBlocks);
+              lastMsg.content += '\n' + (toolBlocks[0]?.content || '');
+              // Update timestamp to reflect the tool result's time
+              if (rawMsg.timestamp) {
+                const ts = new Date(rawMsg.timestamp).toISOString();
+                lastMsg.updatedAt = ts;
+              }
+            }
+          }
+          continue;
+        }
+
+        const message = toMessage(rawMsg, id, msgIndex++);
+        if (message) messages.push(message);
+      }
 
       const cwd = header?.cwd || sm.getCwd();
       const sessionName = sm.getSessionName();
@@ -360,7 +387,7 @@ export function createRealSessionService(): SessionService {
         workspaceId: cwd,
         title,
         status: 'active',
-        messageCount: messageEntries.length,
+        messageCount: messages.length,
         lastMessageAt: messages.length > 0 ? messages[messages.length - 1].createdAt : null,
         createdAt,
         updatedAt: messages.length > 0 ? messages[messages.length - 1].createdAt : createdAt,
