@@ -208,6 +208,20 @@ export function createRealChatService(cwd: string): ChatService {
                         content: block.text,
                       },
                     });
+                  } else if (block.type === 'image') {
+                    // Image blocks in streaming — send as block for display
+                    safeChunk({
+                      type: 'block',
+                      block: {
+                        id: `b-img-${Date.now()}`,
+                        type: 'image',
+                        content: block.data || '',
+                        mimeType: block.mimeType || 'image/png',
+                        data: block.data || '',
+                        width: block.width,
+                        height: block.height,
+                      },
+                    });
                   } else if (block.type === 'thinking') {
                     safeChunk({
                       type: 'block',
@@ -291,6 +305,24 @@ export function createRealChatService(cwd: string): ChatService {
                 isError: (event as any).isError || rawResult?.isError || false,
               },
             });
+
+            // Emit image blocks from tool result content
+            if (rawResult && Array.isArray(rawResult.content)) {
+              for (const c of rawResult.content as any[]) {
+                if (c.type === 'image') {
+                  safeChunk({
+                    type: 'block',
+                    block: {
+                      id: `b-ter-img-${Date.now()}`,
+                      type: 'image',
+                      content: c.data || '',
+                      mimeType: c.mimeType || 'image/png',
+                      data: c.data || '',
+                    },
+                  });
+                }
+              }
+            }
 
             // Emit tool timing
             if (durationMs !== undefined) {

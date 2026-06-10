@@ -60,14 +60,31 @@ function agentMessageToBlocks(msg: any): ContentBlock[] {
   const blocks: ContentBlock[] = [];
 
   if (msg.role === 'user') {
-    const content = typeof msg.content === 'string'
-      ? msg.content
-      : Array.isArray(msg.content) ? msg.content.map((c: any) => c.text || '').join('') : '';
-    blocks.push({
-      id: `b-${msg.timestamp || Date.now()}`,
-      type: 'text',
-      content,
-    });
+    if (typeof msg.content === 'string') {
+      blocks.push({
+        id: `b-${msg.timestamp || Date.now()}`,
+        type: 'text',
+        content: msg.content,
+      });
+    } else if (Array.isArray(msg.content)) {
+      for (const c of msg.content as any[]) {
+        if (c.type === 'text') {
+          blocks.push({
+            id: `b-text-${msg.timestamp || Date.now()}-${blocks.length}`,
+            type: 'text',
+            content: c.text || '',
+          });
+        } else if (c.type === 'image') {
+          blocks.push({
+            id: `b-img-${msg.timestamp || Date.now()}-${blocks.length}`,
+            type: 'image',
+            content: '',
+            mimeType: c.mimeType || 'image/png',
+            data: c.data || '',
+          });
+        }
+      }
+    }
   } else if (msg.role === 'assistant') {
     const content = msg.content;
     if (Array.isArray(content)) {
@@ -99,6 +116,20 @@ function agentMessageToBlocks(msg: any): ContentBlock[] {
             result: resultContent,
             isError: block.isError,
           });
+          // If the tool result content also contains images, produce image blocks
+          if (Array.isArray(block.content)) {
+            for (const c of block.content as any[]) {
+              if (c.type === 'image') {
+                blocks.push({
+                  id: `b-tr-img-${msg.timestamp || Date.now()}-${i}`,
+                  type: 'image',
+                  content: c.data || '',
+                  mimeType: c.mimeType || 'image/png',
+                  data: c.data || '',
+                });
+              }
+            }
+          }
         } else if (block.type === 'thinking') {
           blocks.push({
             id: `b-think-${msg.timestamp || Date.now()}-${i}`,
@@ -106,6 +137,16 @@ function agentMessageToBlocks(msg: any): ContentBlock[] {
             content: block.thinking || block.text || '',
             thinking: block.thinking || block.text || '',
             duration: block.duration,
+          });
+        } else if (block.type === 'image') {
+          blocks.push({
+            id: `b-img-${msg.timestamp || Date.now()}-${i}`,
+            type: 'image',
+            content: block.data || '',
+            mimeType: block.mimeType || 'image/png',
+            data: block.data || '',
+            width: block.width,
+            height: block.height,
           });
         }
       }

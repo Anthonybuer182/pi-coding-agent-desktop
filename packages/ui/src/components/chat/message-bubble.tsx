@@ -1,9 +1,11 @@
-import type { Message, ContentBlock, ThinkingBlock as ThinkingBlockType, ToolCallBlock, ToolResultBlock, AssistantMessage, TokenUsage, ContextUsageInfo, MessageTiming } from '@pi/types';
+import type { Message, ContentBlock, ThinkingBlock as ThinkingBlockType, ToolCallBlock, ToolResultBlock, ImageBlock, FileBlock, AssistantMessage, TokenUsage, ContextUsageInfo, MessageTiming } from '@pi/types';
 import { cn } from '@/lib/utils';
 import { UserIcon, Bot, Clock, Zap, FileText } from 'lucide-react';
 import { ThinkingBlock } from './thinking-block';
 import { ToolCallDisplay } from './tool-call-display';
 import { MarkdownContent } from './markdown-content';
+import { ImageBlockDisplay } from './image-block-display';
+import { FileBlockDisplay } from './file-block-display';
 
 interface MessageBubbleProps {
   message: Message;
@@ -59,6 +61,16 @@ function renderBlocks(blocks: ContentBlock[], isStreaming: boolean, toolTimings:
       }
       case 'tool_result':
         // Skip - already rendered with their tool_call parent
+        break;
+      case 'image':
+        elements.push(
+          <ImageBlockDisplay key={block.id} block={block as ImageBlock} isStreaming={isStreaming} />,
+        );
+        break;
+      case 'file':
+        elements.push(
+          <FileBlockDisplay key={block.id} block={block as FileBlock} />,
+        );
         break;
       default:
         break;
@@ -121,6 +133,15 @@ export function MessageBubble({ message, isStreaming, contextUsage, messageTimin
   // Only show per-message metrics for assistant messages
   const showMessageMetrics = isAssistant && (hasBlocks || message.content);
 
+  // For user messages with blocks, split text blocks from media blocks
+  const userTextBlocks = isUser && hasBlocks
+    ? message.blocks.filter((b) => b.type === 'text')
+    : [];
+  const userMediaBlocks = isUser && hasBlocks
+    ? message.blocks.filter((b) => b.type === 'image' || b.type === 'file')
+    : [];
+  const hasUserMedia = userMediaBlocks.length > 0;
+
   return (
     <div className={cn('flex gap-3 px-4 py-3', isUser ? 'flex-row-reverse' : '')}>
       <div className={cn(
@@ -130,10 +151,24 @@ export function MessageBubble({ message, isStreaming, contextUsage, messageTimin
         {isUser ? <UserIcon className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
       <div className={cn('flex max-w-[85%] flex-col gap-0.5', isUser && 'items-end')}>
-        {isUser || !hasBlocks ? (
+        {isUser ? (
+          <div className={cn('flex flex-col', isUser && 'items-end')}>
+            <div className={cn(
+              'rounded-lg px-4 py-2 text-sm',
+              isUser ? 'bg-primary text-primary-foreground' : 'bg-muted',
+            )}>
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
+            {hasUserMedia && (
+              <div className="flex flex-col gap-1 mt-1 max-w-full">
+                {renderBlocks(userMediaBlocks, !!isStreaming, toolTimings)}
+              </div>
+            )}
+          </div>
+        ) : !hasBlocks ? (
           <div className={cn(
             'rounded-lg px-4 py-2 text-sm',
-            isUser ? 'bg-primary text-primary-foreground' : 'bg-muted',
+            'bg-muted',
           )}>
             <p className="whitespace-pre-wrap">{message.content}</p>
           </div>

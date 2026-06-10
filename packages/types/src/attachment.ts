@@ -1,4 +1,4 @@
-export type AttachmentType = 'image' | 'pdf' | 'office' | 'code' | 'other';
+export type AttachmentType = 'image' | 'pdf' | 'office' | 'code' | 'audio' | 'video' | 'other';
 
 export type AttachmentStatus = 'uploading' | 'ready' | 'error';
 

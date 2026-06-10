@@ -96,11 +96,34 @@ export function Composer() {
     (files: File[]) => {
       files.forEach((file) => {
         const id = `att_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        const isImage = file.type.startsWith('image/');
+        let attType: Attachment['type'] = 'other';
+        const mime = file.type || '';
+
+        if (/^image\/(jpeg|png|gif|webp|svg\+xml)$/i.test(mime)) {
+          attType = 'image';
+        } else if (mime === 'application/pdf') {
+          attType = 'pdf';
+        } else if (
+          /^application\/vnd\.openxmlformats-officedocument\./.test(mime) ||
+          mime === 'application/msword'
+        ) {
+          attType = 'office';
+        } else if (
+          /^text\/(x-|plain|html|css|csv|xml|javascript|typescript)/.test(mime) ||
+          mime === 'application/json' ||
+          mime === 'application/javascript'
+        ) {
+          attType = 'code';
+        } else if (/^audio\//.test(mime)) {
+          attType = 'audio';
+        } else if (/^video\//.test(mime)) {
+          attType = 'video';
+        }
+
         addAttachment({
           id,
           name: file.name,
-          type: isImage ? 'image' : 'other',
+          type: attType,
           size: file.size,
           mimeType: file.type || 'application/octet-stream',
           status: 'uploading',
@@ -233,6 +256,82 @@ export function Composer() {
       // Cancel outgoing refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['session', activeSessionId] });
       const previousSession = queryClient.getQueryData(['session', activeSessionId]);
+
+      // Build user message blocks from attachments for inline preview
+      const currentAttachments = useComposerStore.getState().pendingAttachments;
+      const userBlocks: ContentBlock[] = [];
+      if (currentAttachments.length > 0) {
+        // Text content block
+        if (content) {
+          userBlocks.push({
+            id: `b-text-opt-${Date.now()}`,
+            type: 'text',
+            content,
+          });
+        }
+        for (const att of currentAttachments) {
+          if (att.type === 'image' && att.data) {
+            userBlocks.push({
+              id: `b-img-opt-${att.id}`,
+              type: 'image',
+              content: att.name,
+              mimeType: att.mimeType,
+              data: att.data,
+            });
+          } else if (att.data) {
+            userBlocks.push({
+              id: `b-file-opt-${att.id}`,
+              type: 'file',
+              content: att.name,
+              mimeType: att.mimeType,
+              data: att.data,
+              fileName: att.name,
+              fileSize: att.size,
+            });
+          }
+        }
+      }
+
+      // Append text references for non-image attachments to the prompt content.
+      // For text-based files, decode and include the actual file content so the
+      // AI can analyze it directly.
+      let promptContent = content;
+      const nonImageAtts = currentAttachments.filter((a) => a.type !== 'image' && a.name);
+      if (nonImageAtts.length > 0) {
+        const TEXT_MIMES = new Set([
+          'text/plain', 'text/html', 'text/css', 'text/csv', 'text/xml',
+          'text/javascript', 'text/typescript', 'text/markdown',
+          'text/x-python', 'text/x-java', 'text/x-rust', 'text/x-go',
+          'text/x-c', 'text/x-c++', 'text/x-sh',
+          'application/json', 'application/javascript', 'application/typescript',
+          'application/xml', 'application/x-yaml',
+        ]);
+
+        const fileSections: string[] = [];
+        for (const att of nonImageAtts) {
+          if (att.data && TEXT_MIMES.has(att.mimeType)) {
+            try {
+              // atob returns a binary string; decode UTF-8 bytes properly
+              const binary = atob(att.data);
+              const bytes = new Uint8Array(binary.length);
+              for (let j = 0; j < binary.length; j++) {
+                bytes[j] = binary.charCodeAt(j);
+              }
+              const text = new TextDecoder().decode(bytes);
+              // Wrap in markdown code fences with language hint from extension
+              const ext = (att.name || '').split('.').pop() || '';
+              const fenceExt = ext === 'tsx' ? 'tsx' : ext === 'jsx' ? 'jsx' : ext === 'md' ? 'md' : ext;
+              fileSections.push(`File: ${att.name}\n\`\`\`${fenceExt}\n${text}\n\`\`\``);
+            } catch {
+              fileSections.push(`[Attached: ${att.name} (${att.type}) - could not decode]`);
+            }
+          } else {
+            fileSections.push(`[Attached: ${att.name} (${att.type})]`);
+          }
+        }
+        promptContent = `${content}\n\n${fileSections.join('\n\n')}`;
+      }
+
       // Optimistically show the user message immediately
       queryClient.setQueryData(['session', activeSessionId], (old: any) => {
         if (!old) return old;
@@ -246,14 +345,14 @@ export function Composer() {
               role: 'user',
               status: 'complete',
               content,
-              blocks: [],
+              blocks: userBlocks.length > 0 ? userBlocks : [],
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             },
           ],
         };
       });
-      return { previousSession };
+      return { previousSession, promptContent };
     },
     mutationFn: async (content: string) => {
       if (!activeSessionId) return;
@@ -264,8 +363,46 @@ export function Composer() {
       setStreamError(null);
       setIsStreaming(true);
 
-      // Collect image attachments with base64 data read
+      // Build prompt text: decode and include text-based file contents,
+      // append references for binary files
       const currentAttachments = useComposerStore.getState().pendingAttachments;
+      const nonImageAtts = currentAttachments.filter((a) => a.type !== 'image' && a.name);
+      let promptContent = content;
+      if (nonImageAtts.length > 0) {
+        const TEXT_MIMES = new Set([
+          'text/plain', 'text/html', 'text/css', 'text/csv', 'text/xml',
+          'text/javascript', 'text/typescript', 'text/markdown',
+          'text/x-python', 'text/x-java', 'text/x-rust', 'text/x-go',
+          'text/x-c', 'text/x-c++', 'text/x-sh',
+          'application/json', 'application/javascript', 'application/typescript',
+          'application/xml', 'application/x-yaml',
+        ]);
+
+        const fileSections: string[] = [];
+        for (const att of nonImageAtts) {
+          if (att.data && TEXT_MIMES.has(att.mimeType)) {
+            try {
+              // atob returns binary string; decode UTF-8 bytes properly
+              const binary = atob(att.data);
+              const bytes = new Uint8Array(binary.length);
+              for (let j = 0; j < binary.length; j++) {
+                bytes[j] = binary.charCodeAt(j);
+              }
+              const text = new TextDecoder().decode(bytes);
+              const ext = (att.name || '').split('.').pop() || '';
+              const fenceExt = ext === 'tsx' ? 'tsx' : ext === 'jsx' ? 'jsx' : ext === 'md' ? 'md' : ext;
+              fileSections.push(`File: ${att.name}\n\`\`\`${fenceExt}\n${text}\n\`\`\``);
+            } catch {
+              fileSections.push(`[Attached: ${att.name} (${att.type}) - could not decode]`);
+            }
+          } else {
+            fileSections.push(`[Attached: ${att.name} (${att.type})]`);
+          }
+        }
+        promptContent = `${content}\n\n${fileSections.join('\n\n')}`;
+      }
+
+      // Collect image attachments with base64 data read
       const imageAttachments = currentAttachments
         .filter((a) => a.type === 'image' && a.data)
         .map((a) => ({ name: a.name, mimeType: a.mimeType, data: a.data! }));
@@ -273,7 +410,7 @@ export function Composer() {
       await sdk.chat.sendMessageStream(
         {
           sessionId: activeSessionId,
-          content,
+          content: promptContent,
           workspaceCwd: activeWorkspaceId ?? undefined,
           modelId: config?.defaultModelId,
           attachments: imageAttachments.length > 0 ? imageAttachments : undefined,

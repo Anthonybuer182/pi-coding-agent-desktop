@@ -17,6 +17,14 @@ export interface ContentBlock {
   args?: Record<string, unknown>;
   result?: string;
   isError?: boolean;
+  // Image/file specific
+  mimeType?: string;
+  data?: string;
+  width?: number;
+  height?: number;
+  fileName?: string;
+  fileSize?: number;
+  durationMs?: number;
 }
 
 export interface ThinkingBlock extends ContentBlock {
@@ -38,6 +46,26 @@ export interface ToolResultBlock extends ContentBlock {
   toolCallId: string;
   result: string;
   isError?: boolean;
+}
+
+export interface ImageBlock {
+  id: string;
+  type: 'image';
+  content: string;       // alt text or description
+  mimeType: string;
+  data: string;          // base64 encoded image data
+  width?: number;
+  height?: number;
+}
+
+export interface FileBlock {
+  id: string;
+  type: 'file';
+  content: string;       // filename or description
+  mimeType: string;
+  data?: string;         // base64 data (for displayable files)
+  fileName?: string;
+  fileSize?: number;
 }
 
 export interface Message {
