@@ -1,5 +1,5 @@
 import type { Transport } from '../transport/base.js';
-import type { ChatService, SendMessageParams, StreamChunk } from '../services/chat.js';
+import type { ChatService, SendMessageParams, StreamChunk, NavigateTreeResult, NavigateTreeOptions } from '../services/chat.js';
 import type { Message } from '@pi/types';
 
 /**
@@ -63,6 +63,10 @@ export function createProxyChatService(transport: Transport): ChatService {
 
     async stopGeneration(sessionId: string) {
       return transport.request('chat.stopGeneration', { sessionId }) as ReturnType<ChatService['stopGeneration']>;
+    },
+
+    async navigateTree(sessionId: string, entryId: string, options?: NavigateTreeOptions) {
+      return transport.request('chat.navigateTree', { sessionId, entryId, options }) as Promise<NavigateTreeResult>;
     },
   };
 }

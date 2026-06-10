@@ -78,6 +78,8 @@ export interface Message {
   createdAt: string;
   updatedAt: string;
   metadata?: Record<string, unknown>;
+  /** Raw entry ID from SessionManager, used for tree navigation (branch/edit) */
+  entryId?: string;
 }
 
 export interface UserMessage extends Message {

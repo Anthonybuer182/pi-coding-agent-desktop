@@ -84,8 +84,6 @@ function setupApiRoutes(server: ViteDevServer): void {
 
           try {
             if (method === 'chat.sendMessageStream') {
-              const { createRealChatService } = await server.ssrLoadModule('@pi/sdk-wrapper/adapters');
-              const chatService = createRealChatService(process.cwd());
               await chatService.sendMessageStream(params, (chunk) => {
                 sendSSE(chunk);
               });
@@ -162,6 +160,7 @@ function setupApiRoutes(server: ViteDevServer): void {
 let adaptersModule: any = null;
 let workspaceService: any;
 let sessionService: any;
+let chatService: any;
 let fileService: any;
 let diffService: any;
 let configService: any;
@@ -173,6 +172,7 @@ async function loadAdapters(server: ViteDevServer) {
   const cwd = process.cwd();
   workspaceService = adaptersModule.createRealWorkspaceService();
   sessionService = adaptersModule.createRealSessionService();
+  chatService = adaptersModule.createRealChatService(cwd);
   fileService = adaptersModule.createRealFileService();
   diffService = adaptersModule.createRealDiffService();
   configService = adaptersModule.createRealConfigService(cwd);
@@ -212,21 +212,10 @@ async function handleRequest(server: ViteDevServer, method: string, params: any)
 
     case 'chat':
       switch (action) {
-        case 'sendMessage': {
-          const { createRealChatService } = await server.ssrLoadModule('@pi/sdk-wrapper/adapters');
-          const chatService = createRealChatService(process.cwd());
-          return chatService.sendMessage(params);
-        }
-        case 'getMessages': {
-          const { createRealChatService } = await server.ssrLoadModule('@pi/sdk-wrapper/adapters');
-          const chatService = createRealChatService(process.cwd());
-          return chatService.getMessages(params.sessionId, params.limit, params.offset);
-        }
-        case 'stopGeneration': {
-          const { createRealChatService } = await server.ssrLoadModule('@pi/sdk-wrapper/adapters');
-          const chatService = createRealChatService(process.cwd());
-          return chatService.stopGeneration(params.sessionId);
-        }
+        case 'sendMessage': return chatService.sendMessage(params);
+        case 'getMessages': return chatService.getMessages(params.sessionId, params.limit, params.offset);
+        case 'stopGeneration': return chatService.stopGeneration(params.sessionId);
+        case 'navigateTree': return chatService.navigateTree(params.sessionId, params.entryId, params.options);
       }
       break;
 

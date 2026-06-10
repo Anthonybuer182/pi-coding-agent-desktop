@@ -521,5 +521,11 @@ export function createRealChatService(cwd: string): ChatService {
       }
       activeSessions.clear();
     },
+
+    async navigateTree(sessionId: string, entryId: string, options?: { summarize?: boolean; customInstructions?: string; label?: string }): Promise<{ editorText?: string; cancelled: boolean }> {
+      const session = await getOrCreateAgentSession(sessionId);
+      const result = await session.navigateTree(entryId, options);
+      return { editorText: result.editorText, cancelled: result.cancelled };
+    },
   };
 }

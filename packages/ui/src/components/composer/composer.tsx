@@ -75,6 +75,7 @@ export function Composer() {
     setToolTiming,
     setStreamError,
     triggerSend,
+    clearEditingMessage,
   } = useComposerStore();
 
   // Highlighted index for keyboard navigation in popup menus
@@ -363,6 +364,18 @@ export function Composer() {
       setStreamError(null);
       setIsStreaming(true);
 
+      // If editing a message, navigate the tree first to branch from the edited entry
+      const editEntryId = useComposerStore.getState().editingEntryId;
+      if (editEntryId) {
+        try {
+          await sdk.chat.navigateTree(activeSessionId, editEntryId);
+        } catch (err) {
+          setStreamError(err instanceof Error ? err.message : 'Failed to navigate tree');
+          setIsStreaming(false);
+          throw err;
+        }
+      }
+
       // Build prompt text: decode and include text-based file contents,
       // append references for binary files
       const currentAttachments = useComposerStore.getState().pendingAttachments;
@@ -480,6 +493,14 @@ export function Composer() {
     onSuccess: () => {
       setValue('');
       clearAttachments();
+
+      // Clear editing state if in edit mode
+      if (useComposerStore.getState().editingEntryId) {
+        clearEditingMessage();
+      }
+
+      // Session-tree still needs invalidation to reflect the new branch structure
+      queryClient.invalidateQueries({ queryKey: ['session-tree', activeSessionId] });
 
       // Promote the streaming data into the query cache as a real message.
       // No refetch needed – the streaming content IS the final content.

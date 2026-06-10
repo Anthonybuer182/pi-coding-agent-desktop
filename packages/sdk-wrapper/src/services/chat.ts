@@ -21,6 +21,22 @@ export interface StreamChunk {
   toolTiming?: ToolTiming;
 }
 
+export interface NavigateTreeOptions {
+  /** If true, AI summarizes the abandoned branch before switching */
+  summarize?: boolean;
+  /** Custom instructions for the summary prompt */
+  customInstructions?: string;
+  /** Label to attach to the branch summary entry */
+  label?: string;
+}
+
+export interface NavigateTreeResult {
+  /** Text content of the target user message (for pre-filling editor) */
+  editorText?: string;
+  /** Whether the user cancelled the operation */
+  cancelled: boolean;
+}
+
 export interface ChatService {
   sendMessage(params: SendMessageParams): Promise<Message>;
   sendMessageStream(
@@ -30,4 +46,12 @@ export interface ChatService {
   ): Promise<Message>;
   getMessages(sessionId: string, limit?: number, offset?: number): Promise<Message[]>;
   stopGeneration(sessionId: string): Promise<void>;
+  /**
+   * Navigate to a different node in the session tree.
+   * Moves the leaf pointer to the target entry so the next prompt creates a new branch.
+   * @param sessionId - Session ID
+   * @param entryId - Raw entry ID from SessionManager (the entryId field on a Message)
+   * @param options - Navigation options (summarize, label, etc.)
+   */
+  navigateTree(sessionId: string, entryId: string, options?: NavigateTreeOptions): Promise<NavigateTreeResult>;
 }

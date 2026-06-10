@@ -1,11 +1,19 @@
+import { useState } from 'react';
 import type { Message, ContentBlock, ThinkingBlock as ThinkingBlockType, ToolCallBlock, ToolResultBlock, ImageBlock, FileBlock, AssistantMessage, TokenUsage, ContextUsageInfo, MessageTiming } from '@pi/types';
 import { cn } from '@/lib/utils';
-import { UserIcon, Bot, Clock, Zap, FileText } from 'lucide-react';
+import { UserIcon, Bot, Clock, Zap, FileText, Copy, Pencil, Check, X } from 'lucide-react';
 import { ThinkingBlock } from './thinking-block';
 import { ToolCallDisplay } from './tool-call-display';
 import { MarkdownContent } from './markdown-content';
 import { ImageBlockDisplay } from './image-block-display';
 import { FileBlockDisplay } from './file-block-display';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { useComposerStore } from '@/stores/composer-store';
 
 interface MessageBubbleProps {
   message: Message;
@@ -13,6 +21,12 @@ interface MessageBubbleProps {
   contextUsage?: ContextUsageInfo;
   messageTiming?: MessageTiming;
   toolTimings?: Map<string, number>;
+  /** Callback when user clicks "Edit" on a user message */
+  onEditMessage?: (message: Message) => void;
+  /** Callback when user confirms inline edit with new content */
+  onConfirmEdit?: (message: Message, newContent: string) => void;
+  /** Callback when user cancels inline edit */
+  onCancelEdit?: () => void;
 }
 
 /**
@@ -124,11 +138,23 @@ function MessageMetrics({ timing, contentLength, isStreaming }: { timing?: Messa
   );
 }
 
-export function MessageBubble({ message, isStreaming, contextUsage, messageTiming, toolTimings = new Map() }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  isStreaming,
+  contextUsage,
+  messageTiming,
+  toolTimings = new Map(),
+  onEditMessage,
+  onConfirmEdit,
+  onCancelEdit,
+}: MessageBubbleProps) {
+  const [copied, setCopied] = useState(false);
+  const [editContent, setEditContent] = useState('');
   const isUser = message.role === 'user';
   const hasBlocks = message.blocks && message.blocks.length > 0;
   const isAssistant = message.role === 'assistant';
-  const usage = isAssistant ? (message as AssistantMessage).usage : undefined;
+  const editingMessageId = useComposerStore((s) => s.editingMessageId);
+  const isCurrentlyEditing = isUser && editingMessageId === message.id;
 
   // Only show per-message metrics for assistant messages
   const showMessageMetrics = isAssistant && (hasBlocks || message.content);
@@ -142,6 +168,28 @@ export function MessageBubble({ message, isStreaming, contextUsage, messageTimin
     : [];
   const hasUserMedia = userMediaBlocks.length > 0;
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard may not be available */ }
+  };
+
+  const handleStartEdit = () => {
+    setEditContent(message.content);
+    onEditMessage?.(message);
+  };
+
+  const handleConfirmEdit = () => {
+    onConfirmEdit?.(message, editContent);
+  };
+
+  const handleCancelEdit = () => {
+    setEditContent('');
+    onCancelEdit?.();
+  };
+
   return (
     <div className={cn('flex gap-3 px-4 py-3', isUser ? 'flex-row-reverse' : '')}>
       <div className={cn(
@@ -150,15 +198,50 @@ export function MessageBubble({ message, isStreaming, contextUsage, messageTimin
       )}>
         {isUser ? <UserIcon className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
-      <div className={cn('flex max-w-[85%] flex-col gap-0.5', isUser && 'items-end')}>
+      <div className={cn('flex max-w-[85%] flex-col gap-0.5 group', isUser && 'items-end')}>
         {isUser ? (
           <div className={cn('flex flex-col', isUser && 'items-end')}>
-            <div className={cn(
-              'rounded-lg px-4 py-2 text-sm',
-              isUser ? 'bg-primary text-primary-foreground' : 'bg-muted',
-            )}>
-              <p className="whitespace-pre-wrap">{message.content}</p>
-            </div>
+            {/* Inline editing: textarea replaces the bubble */}
+            {isCurrentlyEditing ? (
+              <div className="flex flex-col gap-1.5 w-full">
+                <textarea
+                  className={cn(
+                    'rounded-lg px-4 py-2 text-sm bg-primary text-primary-foreground w-full min-w-[260px]',
+                    'resize-none outline-none ring-2 ring-primary/50',
+                    'placeholder:text-primary-foreground/50',
+                  )}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={Math.max(2, editContent.split('\n').length)}
+                  autoFocus
+                />
+                <div className={cn('flex items-center gap-1', isUser && 'justify-end')}>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    onClick={handleConfirmEdit}
+                  >
+                    <Check className="h-3 w-3 text-green-500" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    onClick={handleCancelEdit}
+                  >
+                    <X className="h-3 w-3 text-red-500" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className={cn(
+                'rounded-lg px-4 py-2 text-sm',
+                isUser ? 'bg-primary text-primary-foreground' : 'bg-muted',
+              )}>
+                <p className="whitespace-pre-wrap">{message.content}</p>
+              </div>
+            )}
             {hasUserMedia && (
               <div className="flex flex-col gap-1 mt-1 max-w-full">
                 {renderBlocks(userMediaBlocks, !!isStreaming, toolTimings)}
@@ -177,7 +260,11 @@ export function MessageBubble({ message, isStreaming, contextUsage, messageTimin
             {renderBlocks(message.blocks, !!isStreaming, toolTimings)}
           </div>
         )}
-        <div className="flex items-center gap-3">
+        {/* Action row: timestamp + metrics + hover buttons */}
+        <div className={cn(
+          'flex items-center gap-3',
+          isUser && 'flex-row-reverse justify-start',
+        )}>
           <span className="text-[10px] text-muted-foreground/50">
             {new Date(message.createdAt).toLocaleTimeString()}
           </span>
@@ -187,6 +274,42 @@ export function MessageBubble({ message, isStreaming, contextUsage, messageTimin
               contentLength={message.content.length}
               isStreaming={!!isStreaming}
             />
+          )}
+          {/* Hover action buttons: below content, near timestamp */}
+          {message.content && !isStreaming && !isCurrentlyEditing && (
+            <div className={cn(
+              'flex items-center gap-0.5 transition-opacity',
+              'opacity-0 group-hover:opacity-100',
+            )}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="h-5 w-5 text-muted-foreground/50 hover:text-foreground"
+                    onClick={handleCopy}
+                  >
+                    {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{copied ? 'Copied!' : 'Copy'}</TooltipContent>
+              </Tooltip>
+              {isUser && message.entryId && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="h-5 w-5 text-muted-foreground/50 hover:text-foreground"
+                      onClick={handleStartEdit}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Edit</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           )}
         </div>
       </div>

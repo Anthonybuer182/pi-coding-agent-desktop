@@ -20,6 +20,10 @@ interface ComposerState {
   toolTimings: Map<string, number>;
   streamError: string | null;
   triggerSend: number;
+  /** Editing mode: the raw entry ID being edited */
+  editingEntryId: string | null;
+  /** Editing mode: the UI message ID being edited (for reference) */
+  editingMessageId: string | null;
 
   setValue: (value: string) => void;
   setCursorPosition: (pos: number) => void;
@@ -44,6 +48,10 @@ interface ComposerState {
   setToolTiming: (timing: ToolTiming) => void;
   setStreamError: (error: string | null) => void;
   setTriggerSend: (content: string) => void;
+  /** Enter edit mode: track entry and message IDs for navigateTree on send */
+  setEditingMessage: (entryId: string, messageId: string) => void;
+  /** Exit edit mode: clear composer and editing state */
+  clearEditingMessage: () => void;
   reset: () => void;
 }
 
@@ -66,6 +74,8 @@ export const useComposerStore = create<ComposerState>((set) => ({
   toolTimings: new Map(),
   streamError: null,
   triggerSend: 0,
+  editingEntryId: null,
+  editingMessageId: null,
 
   setSessionStats: (sessionStats) => set({ sessionStats }),
   setMessageTiming: (messageTiming) => set({ messageTiming }),
@@ -117,6 +127,10 @@ export const useComposerStore = create<ComposerState>((set) => ({
   setContextUsage: (contextUsage) => set({ contextUsage }),
   setStreamError: (streamError) => set({ streamError }),
   setTriggerSend: (content) => set((s) => ({ value: content, triggerSend: s.triggerSend + 1 })),
+  setEditingMessage: (entryId, messageId) =>
+    set({ editingEntryId: entryId, editingMessageId: messageId }),
+  clearEditingMessage: () =>
+    set({ editingEntryId: null, editingMessageId: null }),
   reset: () =>
     set({
       value: '',
@@ -137,5 +151,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
       toolTimings: new Map(),
       streamError: null,
       triggerSend: 0,
+      editingEntryId: null,
+      editingMessageId: null,
     }),
 }));

@@ -191,7 +191,7 @@ function agentMessageToBlocks(msg: any): ContentBlock[] {
 }
 
 // === Conversion: AgentMessage → our Message type ===
-function toMessage(msg: any, sessionId: string, index: number): Message | null {
+function toMessage(msg: any, sessionId: string, index: number, entryId?: string): Message | null {
   const blocks = agentMessageToBlocks(msg);
   if (blocks.length === 0) return null;
 
@@ -211,6 +211,7 @@ function toMessage(msg: any, sessionId: string, index: number): Message | null {
       blocks,
       createdAt: timestamp,
       updatedAt: timestamp,
+      entryId,
     };
   } else if (msg.role === 'assistant') {
     return {
@@ -223,6 +224,7 @@ function toMessage(msg: any, sessionId: string, index: number): Message | null {
       blocks,
       createdAt: timestamp,
       updatedAt: timestamp,
+      entryId,
       usage: msg.usage ? {
         inputTokens: msg.usage.input ?? msg.usage.inputTokens ?? 0,
         outputTokens: msg.usage.output ?? msg.usage.outputTokens ?? 0,
@@ -244,6 +246,7 @@ function toMessage(msg: any, sessionId: string, index: number): Message | null {
     blocks,
     createdAt: timestamp,
     updatedAt: timestamp,
+    entryId,
   };
 }
 
@@ -423,7 +426,7 @@ export function createRealSessionService(): SessionService {
           continue;
         }
 
-        const message = toMessage(rawMsg, id, msgIndex++);
+        const message = toMessage(rawMsg, id, msgIndex++, entry.id);
         if (message) messages.push(message);
       }
 

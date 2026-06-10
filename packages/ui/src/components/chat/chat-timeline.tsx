@@ -1,5 +1,5 @@
-import { useRef, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useRef, useMemo, useState, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { ArrowDown, AlertTriangle, RefreshCw, MessageSquare } from 'lucide-react';
 import { useSDK } from '@/hooks/use-sdk';
@@ -102,6 +102,7 @@ function makeStreamingMessage(
 
 export function ChatTimeline() {
   const sdk = useSDK();
+  const queryClient = useQueryClient();
   const activeSessionId = useUIStore((s) => s.activeSessionId);
   const isStreaming = useComposerStore((s) => s.isStreaming);
   const streamingBlocks = useComposerStore((s) => s.streamingBlocks);
@@ -111,6 +112,8 @@ export function ChatTimeline() {
   const toolTimings = useComposerStore((s) => s.toolTimings);
   const streamError = useComposerStore((s) => s.streamError);
   const setTriggerSend = useComposerStore((s) => s.setTriggerSend);
+  const setEditingMessage = useComposerStore((s) => s.setEditingMessage);
+  const clearEditingMessage = useComposerStore((s) => s.clearEditingMessage);
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -156,6 +159,43 @@ export function ChatTimeline() {
       setTriggerSend(lastUserMsg.content);
     }
   };
+
+  // Edit: enter inline editing mode for a user message
+  const handleEditMessage = useCallback((message: Message) => {
+    if (message.role === 'user' && message.entryId) {
+      setEditingMessage(message.entryId, message.id);
+    }
+  }, [setEditingMessage]);
+
+  // Confirm inline edit: optimistic truncation + trigger send
+  const handleConfirmEdit = useCallback((message: Message, newContent: string) => {
+    if (!activeSessionId || !message.entryId) return;
+
+    // ① Optimistically truncate messages at the edited message (exclusive).
+    //    The old message is replaced by the new one sent via setTriggerSend.
+    const msgIndex = storedMessages.findIndex((m) => m.id === message.id);
+    if (msgIndex >= 0) {
+      queryClient.setQueryData(['session', activeSessionId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: old.messages.slice(0, msgIndex),
+        };
+      });
+    }
+
+    // ② Set edit state and trigger send (composer's mutationFn handles navigateTree + sendMessageStream)
+    setEditingMessage(message.entryId, message.id);
+    setTriggerSend(newContent);
+    // ③ Immediately clear visual edit state so the original bubble reappears
+    //    (editingEntryId is preserved for navigateTree inside the composer mutation)
+    useComposerStore.setState({ editingMessageId: null });
+  }, [activeSessionId, storedMessages, queryClient, setEditingMessage, setTriggerSend]);
+
+  // Cancel inline edit
+  const handleCancelEdit = useCallback(() => {
+    clearEditingMessage();
+  }, [clearEditingMessage]);
 
   // Scroll to bottom
   const scrollToBottom = () => {
@@ -236,6 +276,9 @@ export function ChatTimeline() {
                 contextUsage={isLast ? contextUsage ?? undefined : undefined}
                 messageTiming={isLast && isAssistant ? messageTiming ?? undefined : undefined}
                 toolTimings={isLast && isAssistant ? toolTimings : new Map()}
+                onEditMessage={handleEditMessage}
+                onConfirmEdit={handleConfirmEdit}
+                onCancelEdit={handleCancelEdit}
               />
             );
           }}
