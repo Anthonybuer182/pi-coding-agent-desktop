@@ -20,8 +20,8 @@ export function createRealChatService(cwd: string): ChatService {
 
   /** Find a model in the registry by its ID string.
    *  Supports "provider/modelId" format for disambiguation.
-   *  When multiple models share the same ID, prefers custom providers
-   *  (from models.json) over built-in ones. */
+   *  When multiple models share the same ID, prefers models with configured
+   *  auth (from models.json or env vars) over built-in ones without auth. */
   function findModelById(modelId: string) {
     const slashIdx = modelId.lastIndexOf('/');
     if (slashIdx > 0) {
@@ -29,7 +29,12 @@ export function createRealChatService(cwd: string): ChatService {
       const id = modelId.substring(slashIdx + 1);
       return modelRegistry.getAll().find((m) => m.id === id && m.provider === provider);
     }
-    // Find by ID, preferring the last match (custom models are appended after built-in)
+    // First, search only models that have configured auth (API key or OAuth)
+    const available = modelRegistry.getAvailable();
+    for (let i = available.length - 1; i >= 0; i--) {
+      if (available[i].id === modelId) return available[i];
+    }
+    // Fall back to all models (may not have auth configured)
     const all = modelRegistry.getAll();
     for (let i = all.length - 1; i >= 0; i--) {
       if (all[i].id === modelId) return all[i];
