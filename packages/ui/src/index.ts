@@ -22,7 +22,7 @@ export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './component
 export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectLabel, SelectItem, SelectSeparator, SelectScrollUpButton, SelectScrollDownButton } from './components/ui/select';
 export { Slot } from './components/ui/slot';
 
-export { cn } from './lib/utils';
+export { cn, isTextEditableFile, isPreviewableInRightPanel, openWithSystemApp } from './lib/utils';
 
 export { useUIStore } from './stores/ui-store';
 export { useThemeStore } from './stores/theme-store';
@@ -39,7 +39,7 @@ export { WorkspaceDropdown, WorkspaceCreateDialog } from './components/workspace
 export { SessionList, SessionItem, SessionCreateButton, SessionGroupHeader, SessionTree } from './components/session';
 export { ChatTimeline, MessageBubble, ThinkingBlock, ToolCallDisplay, EmptyChat, StreamingIndicator } from './components/chat';
 export { Composer, ComposerInput, SendButton, SlashCommandMenu, MentionMenu, AttachmentPreviewBar, FileUploadButton } from './components/composer';
-export { DocumentPreview, CodeEditor, MarkdownPreview, ImagePreview, PDFPreview, OfficeDocPreview, EmptyPreview } from './components/document';
+export { DocumentPreview, CodeEditor, MarkdownPreview, HTMLPreview, DocxPreview, XlsxPreview, PptxPreview, PDFPreview, EmptyPreview } from './components/document';
 export { DiffReview, DiffLine, DiffHunk, DiffHeader, AcceptRejectControls, EmptyDiff } from './components/diff';
 export { ModelSelector, ThinkLevelSelector, CompactToggle, SkillSelector } from './components/model';
 export { ProviderSettings } from './components/settings';

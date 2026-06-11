@@ -1,7 +1,9 @@
 export { DocumentPreview } from './document-preview';
 export { CodeEditor } from './code-editor';
 export { MarkdownPreview } from './markdown-preview';
-export { ImagePreview } from './image-preview';
+export { HTMLPreview } from './html-preview';
+export { DocxPreview } from './docx-preview';
+export { XlsxPreview } from './xlsx-preview';
+export { PptxPreview } from './pptx-preview';
 export { PDFPreview } from './pdf-preview';
-export { OfficeDocPreview } from './office-doc-preview';
 export { EmptyPreview } from './empty-preview';

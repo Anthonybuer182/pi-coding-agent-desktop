@@ -10,6 +10,7 @@ interface UIState {
   activeDiffId: string | null;
   sidebarOpen: boolean;
   rightPanelOpen: boolean;
+  rightPanelWidth: number;
   rightPanelActiveTab: 'preview' | 'diff' | 'settings' | 'session-tree';
   compactMode: boolean;
   selectedSkills: string[];
@@ -22,6 +23,7 @@ interface UIState {
   setActiveDiff: (id: string | null) => void;
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
+  setRightPanelWidth: (width: number) => void;
   setRightPanelTab: (tab: string) => void;
   setCompactMode: (compact: boolean) => void;
   toggleSkill: (skillId: string) => void;
@@ -38,6 +40,7 @@ export const useUIStore = create<UIState>()(
       activeDiffId: null,
       sidebarOpen: true,
       rightPanelOpen: true,
+      rightPanelWidth: 600,
       rightPanelActiveTab: 'preview',
       compactMode: false,
       selectedSkills: ['skill-officecli', 'skill-filesystem'],
@@ -50,6 +53,7 @@ export const useUIStore = create<UIState>()(
       setActiveDiff: (id) => set({ activeDiffId: id, rightPanelActiveTab: 'diff' }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+      setRightPanelWidth: (width) => set({ rightPanelWidth: width }),
       setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab as 'preview' | 'diff' | 'settings' | 'session-tree' }),
       setCompactMode: (compact) => set({ compactMode: compact }),
       toggleSkill: (skillId) =>
@@ -68,6 +72,7 @@ export const useUIStore = create<UIState>()(
         activeSessionId: state.activeSessionId,
         sidebarOpen: state.sidebarOpen,
         rightPanelOpen: state.rightPanelOpen,
+        rightPanelWidth: state.rightPanelWidth,
         rightPanelActiveTab: state.rightPanelActiveTab,
         compactMode: state.compactMode,
         selectedSkills: state.selectedSkills,

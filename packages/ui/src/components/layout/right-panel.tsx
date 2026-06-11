@@ -5,5 +5,5 @@ interface RightPanelProps {
 }
 
 export function RightPanel({ children }: RightPanelProps) {
-  return <div className="flex-1 overflow-hidden">{children}</div>;
+  return <div className="h-full overflow-hidden">{children}</div>;
 }

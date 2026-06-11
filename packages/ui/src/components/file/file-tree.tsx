@@ -4,6 +4,7 @@ import { useSDK } from '@/hooks/use-sdk';
 import { useUIStore } from '@/stores/ui-store';
 import { FileTreeNode } from './file-tree-node';
 import { Button } from '@/components/ui/button';
+import { isPreviewableInRightPanel, openWithSystemApp } from '@/lib/utils';
 
 const HIDDEN_DIRS = new Set(['.git', 'node_modules', '.vite', 'dist', '.next', '__pycache__', '.DS_Store']);
 
@@ -19,6 +20,14 @@ export function FileTree() {
     enabled: !!activeWorkspaceId,
     staleTime: 30_000,
   });
+
+  const handleFileClick = (path: string) => {
+    if (isPreviewableInRightPanel(path)) {
+      setActivePreviewFile(path);
+    } else {
+      openWithSystemApp(path);
+    }
+  };
 
   if (!activeWorkspaceId) return null;
 
@@ -71,7 +80,7 @@ export function FileTree() {
               entry={entry}
               workspaceId={activeWorkspaceId}
               depth={0}
-              onFileClick={setActivePreviewFile}
+              onFileClick={handleFileClick}
             />
           ))}
       </div>

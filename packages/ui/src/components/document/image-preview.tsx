@@ -9,7 +9,7 @@ export function ImagePreview() {
   const activeWorkspaceId = useUIStore((s) => s.activeWorkspaceId);
   const activePreviewFilePath = useUIStore((s) => s.activePreviewFilePath);
 
-  const { data: file, isLoading } = useQuery({
+  const { data: file, isLoading, error } = useQuery({
     queryKey: ['file', activeWorkspaceId, activePreviewFilePath],
     queryFn: () => sdk.file.read(activeWorkspaceId!, activePreviewFilePath!),
     enabled:
@@ -27,26 +27,44 @@ export function ImagePreview() {
 
   if (isLoading) return <LoadingSpinner message="Loading image..." />;
 
-  if (!file) return null;
-
-  // For mock: the file content may be a data URL or we show a placeholder
-  const isBase64 = file.content?.startsWith('data:');
-  const src = isBase64 ? file.content : undefined;
+  // Build image src from file content
+  const src = (() => {
+    if (!file?.content) return undefined;
+    if (file.encoding === 'base64') {
+      const mimeType = file.mimeType ?? 'image/png';
+      return `data:${mimeType};base64,${file.content}`;
+    }
+    // Legacy: check if content is already a data URL
+    if (file.content.startsWith('data:')) return file.content;
+    return undefined;
+  })();
 
   return (
-    <div className="flex h-full flex-col items-center justify-center bg-muted/20 p-4">
-      {src ? (
-        <img
-          src={src}
-          alt={file.path ?? 'Preview'}
-          className="max-h-full max-w-full rounded-lg object-contain shadow-lg"
-        />
-      ) : (
-        <div className="flex flex-col items-center gap-2 text-muted-foreground">
-          <ImageIcon className="h-16 w-16" />
-          <p className="text-xs">{file.path ?? 'Image not available'}</p>
-        </div>
-      )}
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
+        <ImageIcon className="h-3.5 w-3.5" />
+        <span className="truncate">{file?.path ?? activePreviewFilePath}</span>
+        {file?.mimeType && <span className="text-[10px] opacity-50">{file.mimeType}</span>}
+      </div>
+      <div className="flex-1 flex items-center justify-center bg-muted/20 p-4">
+        {src ? (
+          <img
+            src={src}
+            alt={file?.path ?? 'Preview'}
+            className="max-h-full max-w-full rounded-lg object-contain shadow-lg"
+          />
+        ) : error ? (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <ImageIcon className="h-16 w-16" />
+            <p className="text-xs text-destructive">Failed to load image</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <ImageIcon className="h-16 w-16" />
+            <p className="text-xs">{file?.path ?? 'Image not available'}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

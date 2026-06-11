@@ -226,6 +226,7 @@ async function handleRequest(server: ViteDevServer, method: string, params: any)
         case 'read': return fileService.read(params.workspaceId, params.path);
         case 'list': return fileService.list(params.workspaceId, params.directory ?? params.dirPath);
         case 'write': return fileService.write(params.workspaceId, params.path, params.content);
+        case 'readOffice': return fileService.readOffice(params.workspaceId, params.path);
       }
       break;
 

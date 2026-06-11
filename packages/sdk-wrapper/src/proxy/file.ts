@@ -15,5 +15,8 @@ export function createProxyFileService(transport: Transport): FileService {
     async delete(workspaceId: string, filePath: string) {
       return transport.request('file.delete', { workspaceId, path: filePath }) as ReturnType<FileService['delete']>;
     },
+    async readOffice(workspaceId: string, filePath: string) {
+      return transport.request('file.readOffice', { workspaceId, path: filePath }) as ReturnType<FileService['readOffice']>;
+    },
   };
 }

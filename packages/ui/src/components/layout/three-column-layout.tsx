@@ -16,6 +16,8 @@ interface ThreeColumnLayoutProps {
   rightPanelHeader?: ReactNode;
   /** Callback when the right panel toggle button is clicked. */
   onToggleRightPanel?: () => void;
+  /** Callback when right panel width changes (after drag/arrow-key resize finishes). */
+  onRightWidthChange?: (width: number) => void;
   leftWidth?: number;
   rightWidth?: number;
   minLeftWidth?: number;
@@ -33,12 +35,13 @@ export function ThreeColumnLayout({
   topLeftContent,
   rightPanelHeader,
   onToggleRightPanel,
+  onRightWidthChange,
   leftWidth = 260,
-  rightWidth = 400,
+  rightWidth = 600,
   minLeftWidth = 200,
   minRightWidth = 300,
   maxLeftWidth = 400,
-  maxRightWidth = 600,
+  maxRightWidth = 1200,
   rightPanelOpen = true,
   sidebarOpen = true,
 }: ThreeColumnLayoutProps) {
@@ -46,6 +49,12 @@ export function ThreeColumnLayout({
   const [currentRightWidth, setCurrentRightWidth] = useState(rightWidth);
   const [dragging, setDragging] = useState<'left' | 'right' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const rightWidthRef = useRef(currentRightWidth);
+  const onRightWidthChangeRef = useRef(onRightWidthChange);
+
+  // Keep refs in sync
+  rightWidthRef.current = currentRightWidth;
+  onRightWidthChangeRef.current = onRightWidthChange;
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
@@ -69,7 +78,20 @@ export function ThreeColumnLayout({
 
   const handleMouseUp = useCallback(() => {
     setDragging(null);
+    // Persist the current right width after drag ends
+    onRightWidthChangeRef.current?.(rightWidthRef.current);
   }, []);
+
+  const handleKeyboardResize = useCallback((delta: number) => {
+    setCurrentRightWidth((prev) => {
+      const next = Math.max(minRightWidth, Math.min(maxRightWidth, prev + delta));
+      return next;
+    });
+    // Need to read the new value after state update, so schedule a microtask
+    queueMicrotask(() => {
+      onRightWidthChangeRef.current?.(rightWidthRef.current + delta);
+    });
+  }, [minRightWidth, maxRightWidth]);
 
   useEffect(() => {
     if (dragging) {
@@ -180,13 +202,9 @@ export function ThreeColumnLayout({
             onMouseDown={() => setDragging('right')}
             onKeyDown={(e) => {
               if (e.key === 'ArrowLeft')
-                setCurrentRightWidth(
-                  Math.max(minRightWidth, currentRightWidth - 10),
-                );
+                handleKeyboardResize(-10);
               if (e.key === 'ArrowRight')
-                setCurrentRightWidth(
-                  Math.min(maxRightWidth, currentRightWidth + 10),
-                );
+                handleKeyboardResize(10);
             }}
           />
           <div

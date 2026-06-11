@@ -51,6 +51,8 @@ function AppContent() {
 
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+  const rightPanelWidth = useUIStore((s) => s.rightPanelWidth);
+  const setRightPanelWidth = useUIStore((s) => s.setRightPanelWidth);
   const rightPanelActiveTab = useUIStore((s) => s.rightPanelActiveTab);
   const setRightPanelTab = useUIStore((s) => s.setRightPanelTab);
   const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
@@ -72,6 +74,8 @@ function AppContent() {
           sidebarOpen={sidebarOpen}
           rightPanelOpen={rightPanelOpen}
           onToggleRightPanel={toggleRightPanel}
+          rightWidth={rightPanelWidth}
+          onRightWidthChange={setRightPanelWidth}
           topLeftContent={
             <>
               <WorkspaceDropdown />

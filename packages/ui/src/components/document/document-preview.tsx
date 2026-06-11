@@ -1,9 +1,11 @@
 import { useUIStore } from '@/stores/ui-store';
 import { CodeEditor } from './code-editor';
 import { MarkdownPreview } from './markdown-preview';
-import { ImagePreview } from './image-preview';
+import { HTMLPreview } from './html-preview';
+import { DocxPreview } from './docx-preview';
+import { XlsxPreview } from './xlsx-preview';
+import { PptxPreview } from './pptx-preview';
 import { PDFPreview } from './pdf-preview';
-import { OfficeDocPreview } from './office-doc-preview';
 import { EmptyPreview } from './empty-preview';
 
 export function DocumentPreview() {
@@ -12,9 +14,11 @@ export function DocumentPreview() {
   if (!filePath) return <EmptyPreview />;
 
   if (filePath.endsWith('.md')) return <MarkdownPreview />;
-  if (filePath.match(/\.(png|jpg|jpeg|gif|svg|webp)$/i)) return <ImagePreview />;
+  if (filePath.endsWith('.html')) return <HTMLPreview />;
+  if (filePath.endsWith('.docx')) return <DocxPreview />;
+  if (filePath.endsWith('.xlsx')) return <XlsxPreview />;
+  if (filePath.endsWith('.pptx')) return <PptxPreview />;
   if (filePath.endsWith('.pdf')) return <PDFPreview />;
-  if (filePath.match(/\.(doc|docx|xls|xlsx|ppt|pptx)$/i)) return <OfficeDocPreview />;
 
   return <CodeEditor />;
 }

@@ -122,6 +122,7 @@ async function handleFile(action: string, params: unknown): Promise<unknown> {
     case 'read': return fileService.read(p.workspaceId as string, p.path as string);
     case 'list': return fileService.list(p.workspaceId as string, (p.directory ?? p.dirPath) as string | undefined);
     case 'write': return fileService.write(p.workspaceId as string, p.path as string, p.content as string);
+    case 'readOffice': return fileService.readOffice(p.workspaceId as string, p.path as string);
     default: throw new Error(`Unknown file action: ${action}`);
   }
 }
