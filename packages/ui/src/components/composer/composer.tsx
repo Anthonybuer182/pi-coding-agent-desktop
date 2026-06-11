@@ -266,6 +266,7 @@ export function Composer() {
       const currentValue = useComposerStore.getState().value;
       if (currentValue.trim()) {
         sendMutation.mutate(currentValue);
+        setValue('');
       }
     }
   }, [triggerSend]);

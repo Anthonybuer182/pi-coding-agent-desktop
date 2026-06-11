@@ -105,6 +105,10 @@ export function ComposerInput({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // During IME composition (e.g. typing Chinese/Japanese), Enter confirms
+      // the candidate character and should NOT be treated as a send/submit.
+      if (isComposing.current) return;
+
       // When menu is open, route navigation keys to the menu
       if (showMenu) {
         if (e.key === 'ArrowDown') {
