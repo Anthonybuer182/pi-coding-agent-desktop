@@ -5,6 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 import { Check, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MermaidDiagram } from './mermaid-diagram';
 import './chat-animations.css';
 
 interface MarkdownContentProps {
@@ -110,6 +111,19 @@ export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) 
                 <code className={className} {...props}>
                   {codeContent}
                 </code>
+              );
+            }
+
+            const langMatch = /language-(\w+)/.exec(className || '');
+            const language = langMatch ? langMatch[1] : '';
+            const source = extractText(codeContent);
+
+            if (language === 'mermaid') {
+              return (
+                <MermaidDiagram
+                  source={source}
+                  isStreaming={isStreaming}
+                />
               );
             }
 
