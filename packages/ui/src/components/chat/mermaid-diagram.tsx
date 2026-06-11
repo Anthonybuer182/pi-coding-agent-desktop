@@ -8,12 +8,14 @@ interface MermaidDiagramProps {
 }
 
 let initDone = false;
+const svgCache = new Map<string, string>();
 
 export function MermaidDiagram({ source, isStreaming }: MermaidDiagramProps) {
   const svgContainerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  const renderIdRef = useRef(0);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -36,67 +38,82 @@ export function MermaidDiagram({ source, isStreaming }: MermaidDiagramProps) {
 
   useLayoutEffect(() => {
     if (isStreaming) return;
-    if (!source.trim()) return;
+    const trimmed = source.trim();
+    if (!trimmed) return;
+
+    // Increment render ID to cancel any pending render
+    renderIdRef.current += 1;
+    const currentRenderId = renderIdRef.current;
 
     const container = svgContainerRef.current;
     if (!container) return;
 
-    // Remove any previously inserted elements
-    while (container.firstChild) {
-      container.removeChild(container.firstChild);
+    // Check cache first — if we've rendered this source before, insert synchronously
+    const cachedSvg = svgCache.get(trimmed);
+    if (cachedSvg) {
+      container.replaceChildren();
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = cachedSvg;
+      container.appendChild(wrapper);
+      return;
     }
 
     // Show loading indicator
+    container.replaceChildren();
     const loadingEl = document.createElement('div');
     loadingEl.textContent = 'Loading diagram...';
     loadingEl.className = 'animate-pulse text-muted-foreground py-4';
     container.appendChild(loadingEl);
 
-    let cancelled = false;
+    // Track the source we're rendering to detect if it changes mid-render
+    const sourceToRender = trimmed;
 
-    async function renderDiagram() {
+    (async () => {
       try {
         const mermaid = await import('mermaid');
+
+        // Check if this render is still valid
+        if (currentRenderId !== renderIdRef.current) return;
 
         if (!initDone) {
           const isDark = document.documentElement.classList.contains('dark');
           mermaid.default.initialize({
             startOnLoad: false,
             theme: isDark ? 'dark' : 'default',
-            securityLevel: 'sandbox',
+            securityLevel: 'loose',
           });
           initDone = true;
         }
 
         const { svg: renderedSvg } = await mermaid.default.render(
           'mermaid-' + Math.random().toString(36).slice(2),
-          source.trim(),
+          sourceToRender,
         );
 
-        if (!cancelled && container) {
-          // Clear loading indicator
-          while (container.firstChild) {
-            container.removeChild(container.firstChild);
-          }
-          // Insert SVG via a wrapper to avoid React DOM conflicts
-          const wrapper = document.createElement('div');
-          wrapper.innerHTML = renderedSvg;
-          wrapper.className = 'flex items-center justify-center';
-          container.appendChild(wrapper);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : 'Unknown error';
-          setError(message);
-        }
-      }
-    }
+        // Check if this render is still valid
+        if (currentRenderId !== renderIdRef.current) return;
 
-    renderDiagram();
+        // Get fresh reference to container (it may have been recreated)
+        const el = svgContainerRef.current;
+        if (!el || !el.isConnected) return;
+
+        // Insert the rendered SVG
+        el.replaceChildren();
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = renderedSvg;
+        el.appendChild(wrapper);
+        svgCache.set(sourceToRender, renderedSvg);
+        setError(null);
+      } catch (err) {
+        if (currentRenderId !== renderIdRef.current) return;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setError(message);
+      }
+    })();
 
     return () => {
-      cancelled = true;
+      // Bump the render ID to cancel the pending async work
+      renderIdRef.current += 1;
     };
   }, [source, isStreaming]);
 
@@ -213,7 +230,7 @@ export function MermaidDiagram({ source, isStreaming }: MermaidDiagramProps) {
       </div>
       <div
         className={cn(
-          'border border-border border-t-0 rounded-b-md bg-background flex items-center justify-center p-4 overflow-auto transition-all',
+          'border border-border border-t-0 rounded-b-md bg-background flex items-center justify-center p-4 overflow-auto',
           zoomed ? 'max-h-none' : 'max-h-96',
         )}
       >
