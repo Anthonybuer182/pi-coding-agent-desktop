@@ -1,4 +1,4 @@
-import { useRef, useCallback, KeyboardEvent, useEffect } from 'react';
+import { useState, useRef, useCallback, KeyboardEvent, useLayoutEffect, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 interface ComposerInputProps {
@@ -17,6 +17,12 @@ interface ComposerInputProps {
   onMenuNavigate?: (direction: 'up' | 'down') => void;
   onMenuSelect?: () => void;
   totalMenuItems?: number;
+  /** Called when Ctrl+Enter is pressed while streaming: steer the agent */
+  onSteerSubmit?: () => void;
+  /** Called when Enter is pressed while streaming: queue a follow-up */
+  onFollowUpSubmit?: () => void;
+  /** Whether the agent is currently generating a response */
+  isStreaming?: boolean;
 }
 
 export function ComposerInput({
@@ -34,35 +40,57 @@ export function ComposerInput({
   showMenu = false,
   onMenuNavigate,
   onMenuSelect,
+  onSteerSubmit,
+  onFollowUpSubmit,
+  isStreaming = false,
 }: ComposerInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Track IME composition state to prevent store updates from fighting CJK input.
+  // Using a ref (not state) so we can read it synchronously in onChange.
+  const isComposing = useRef(false);
 
-  // Auto-resize
+  // Local mirror of the external value. The textarea is always controlled via
+  // localValue so the DOM never switches between controlled/uncontrolled – this
+  // eliminates the fragile "value={composing ? undefined : value}" pattern that
+  // can permanently block input when compositionend is never fired.
+  const [localValue, setLocalValue] = useState(value);
+
+  // Sync external value → localValue only when not actively composing.
+  // During IME composition the local state holds the intermediate text.
   useEffect(() => {
+    if (!isComposing.current) {
+      setLocalValue(value);
+    }
+  }, [value]);
+
+  // Auto-resize — useLayoutEffect runs BEFORE paint, eliminating visual flicker
+  useLayoutEffect(() => {
     if (!autoResize || !textareaRef.current) return;
     const el = textareaRef.current;
     el.style.height = 'auto';
-    const lineHeight = 20; // approximate for text-sm
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20;
     const maxHeight = lineHeight * maxRows;
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
-  }, [value, autoResize, maxRows]);
+  }, [localValue, autoResize, maxRows]);
 
-  const handleChange = useCallback(
-    (value: string) => {
-      onChange(value);
+  const flushToStore = useCallback(
+    (rawValue: string) => {
+      onChange(rawValue);
 
-      const cursorPos = textareaRef.current?.selectionStart ?? value.length;
-      const textBeforeCursor = value.slice(0, cursorPos);
+      const cursorPos = textareaRef.current?.selectionStart ?? rawValue.length;
+      const textBeforeCursor = rawValue.slice(0, cursorPos);
 
-      // Detect slash commands
-      const slashMatch = textBeforeCursor.match(/\/(\w*)$/);
+      // Only detect slash commands when / is at start of input or after whitespace,
+      // so paths like "path/to/file" don't accidentally trigger the menu.
+      const slashMatch = textBeforeCursor.match(/(?:^|\s)\/(\w*)$/);
       if (slashMatch && onSlashDetected) {
         onSlashDetected(slashMatch[1]);
         return;
       }
 
-      // Detect mentions
-      const mentionMatch = textBeforeCursor.match(/@([\w-]*)$/);
+      // Only detect mentions when @ is at start of input or after whitespace,
+      // so emails like "user@example.com" don't accidentally trigger the menu.
+      const mentionMatch = textBeforeCursor.match(/(?:^|\s)@([\w-]*)$/);
       if (mentionMatch && onMentionDetected) {
         onMentionDetected(mentionMatch[1]);
         return;
@@ -103,6 +131,31 @@ export function ComposerInput({
         return;
       }
 
+      // During streaming: Enter = follow-up (default), Ctrl/Cmd+Enter = steer
+      if (isStreaming) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          if (value.trim()) {
+            onSteerSubmit?.();
+          }
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (value.trim()) {
+            onFollowUpSubmit?.();
+          }
+          return;
+        }
+        // Escape during streaming aborts
+        if (e.key === 'Escape') {
+          onSlashDismiss?.();
+          onMentionDismiss?.();
+          return;
+        }
+        return;
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         if (value.trim()) {
@@ -114,14 +167,43 @@ export function ComposerInput({
         onMentionDismiss?.();
       }
     },
-    [value, onSubmit, onSlashDismiss, onMentionDismiss, showMenu, onMenuNavigate, onMenuSelect],
+    [value, onSubmit, onSlashDismiss, onMentionDismiss, showMenu, onMenuNavigate, onMenuSelect, isStreaming, onSteerSubmit, onFollowUpSubmit],
   );
 
   return (
     <textarea
       ref={textareaRef}
-      value={value}
-      onChange={(e) => handleChange(e.target.value)}
+      value={localValue}
+      onChange={(e) => {
+        const newValue = e.target.value;
+        // Always update local state so the textarea always reflects user input.
+        setLocalValue(newValue);
+        // During IME composition, defer the store update until compositionEnd
+        // to avoid React's controlled re-render overwriting the IME candidate text.
+        if (!isComposing.current) {
+          flushToStore(newValue);
+        }
+      }}
+      onCompositionStart={() => {
+        isComposing.current = true;
+      }}
+      onCompositionEnd={(e) => {
+        isComposing.current = false;
+        const finalValue = (e.target as HTMLTextAreaElement).value;
+        setLocalValue(finalValue);
+        flushToStore(finalValue);
+      }}
+      onBlur={() => {
+        // Safety net: if compositionend was never delivered (e.g. user clicked
+        // away during an active IME session), reset the flag so the next
+        // keystroke isn't permanently blocked.
+        if (isComposing.current) {
+          isComposing.current = false;
+          if (textareaRef.current) {
+            flushToStore(textareaRef.current.value);
+          }
+        }
+      }}
       onKeyDown={handleKeyDown}
       disabled={disabled}
       placeholder={placeholder}

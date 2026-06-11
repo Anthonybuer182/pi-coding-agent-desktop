@@ -1,4 +1,4 @@
-import type { Message, ContentBlock, TokenUsage, ContextUsageInfo, SessionStatsInfo, MessageTiming, ToolTiming } from '@pi/types';
+import type { Message, ContentBlock, TokenUsage, ContextUsageInfo, SessionStatsInfo, MessageTiming, ToolTiming, QueueState, StreamingBehavior } from '@pi/types';
 
 export interface SendMessageParams {
   sessionId: string;
@@ -7,10 +7,12 @@ export interface SendMessageParams {
   attachments?: { name: string; mimeType: string; data: string }[];
   modelId?: string;
   workspaceCwd?: string;
+  /** Queue the message as a steer or follow-up while the agent is working */
+  streamingBehavior?: StreamingBehavior;
 }
 
 export interface StreamChunk {
-  type: 'text' | 'block' | 'usage' | 'context' | 'stats' | 'message_timing' | 'tool_timing' | 'done' | 'error';
+  type: 'text' | 'block' | 'usage' | 'context' | 'stats' | 'message_start' | 'message_timing' | 'tool_timing' | 'queue_update' | 'done' | 'error';
   content?: string;
   block?: ContentBlock;
   error?: string;
@@ -19,6 +21,8 @@ export interface StreamChunk {
   sessionStats?: SessionStatsInfo;
   messageTiming?: MessageTiming;
   toolTiming?: ToolTiming;
+  /** Current state of the steering and follow-up queues */
+  queueState?: QueueState;
 }
 
 export interface NavigateTreeOptions {
@@ -46,6 +50,17 @@ export interface ChatService {
   ): Promise<Message>;
   getMessages(sessionId: string, limit?: number, offset?: number): Promise<Message[]>;
   stopGeneration(sessionId: string): Promise<void>;
+  /**
+   * Queue a steering message that is delivered after the current assistant turn's
+   * tool calls complete, before the next LLM invocation. Use to redirect the agent.
+   */
+  steer(sessionId: string, content: string, images?: { name: string; mimeType: string; data: string }[]): Promise<void>;
+  /**
+   * Queue a follow-up message that is delivered only after the agent has finished
+   * all work (all tool calls and steering messages processed). Use to append
+   * additional tasks.
+   */
+  followUp(sessionId: string, content: string, images?: { name: string; mimeType: string; data: string }[]): Promise<void>;
   /**
    * Navigate to a different node in the session tree.
    * Moves the leaf pointer to the target entry so the next prompt creates a new branch.

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, useRef, useEffect, DragEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Square, Upload } from 'lucide-react';
+import { Square, Upload, CornerDownRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -14,6 +14,7 @@ import { SlashCommandMenu } from './slash-command-menu';
 import { MentionMenu } from './mention-menu';
 import type { MentionItem } from './mention-menu';
 import { AttachmentPreviewBar } from './attachment-preview-bar';
+import { QueueIndicator } from './queue-indicator';
 import { ModelSelector } from '../model/model-selector';
 import { ThinkLevelSelector } from '../model/think-level-selector';
 import { SkillSelector } from '../model/skill-selector';
@@ -76,6 +77,12 @@ export function Composer() {
     setStreamError,
     triggerSend,
     clearEditingMessage,
+    steeringQueue,
+    followUpQueue,
+    setQueues,
+    enqueueFollowUp,
+    enqueueSteer,
+    dequeueNext,
   } = useComposerStore();
 
   // Highlighted index for keyboard navigation in popup menus
@@ -238,6 +245,20 @@ export function Composer() {
       setIsStreaming(false);
     }
   }, [sdk, activeSessionId, setIsStreaming]);
+
+  /** Send the current composer text as a steering message — queued locally, sent later */
+  const handleSteerSubmit = useCallback(() => {
+    if (!value.trim() || !activeSessionId || !isStreaming) return;
+    enqueueSteer(value);
+    setValue('');
+  }, [value, activeSessionId, isStreaming, enqueueSteer, setValue]);
+
+  /** Send the current composer text as a follow-up message — queued locally, sent later */
+  const handleFollowUpSubmit = useCallback(() => {
+    if (!value.trim() || !activeSessionId || !isStreaming) return;
+    enqueueFollowUp(value);
+    setValue('');
+  }, [value, activeSessionId, isStreaming, enqueueFollowUp, setValue]);
 
   // Watch for retry trigger from ChatTimeline
   useEffect(() => {
@@ -484,6 +505,8 @@ export function Composer() {
             setMessageTiming(chunk.messageTiming);
           } else if (chunk.type === 'tool_timing' && chunk.toolTiming) {
             setToolTiming(chunk.toolTiming);
+          } else if (chunk.type === 'queue_update' && chunk.queueState) {
+            setQueues(chunk.queueState.steering, chunk.queueState.followUp);
           } else if (chunk.type === 'error') {
             setStreamError(chunk.error || 'An unknown error occurred');
           }
@@ -491,9 +514,6 @@ export function Composer() {
       );
     },
     onSuccess: () => {
-      setValue('');
-      clearAttachments();
-
       // Clear editing state if in edit mode
       if (useComposerStore.getState().editingEntryId) {
         clearEditingMessage();
@@ -502,11 +522,10 @@ export function Composer() {
       // Session-tree still needs invalidation to reflect the new branch structure
       queryClient.invalidateQueries({ queryKey: ['session-tree', activeSessionId] });
 
-      // Promote the streaming data into the query cache as a real message.
-      // No refetch needed – the streaming content IS the final content.
-      // All state changes happen synchronously, batched by React 18 → no flash.
+      // Promote the streaming data into the query cache as a single assistant message.
+      // Each stream produces exactly one assistant response, since follow-ups/steers
+      // are now sent via separate sendMutation.mutate() calls.
       const state = useComposerStore.getState();
-      // Merge toolTimings into blocks so durations persist across reloads
       const blocks = state.streamingBlocks.map((b) => {
         if (b.type === 'tool_call' && b.toolCallId) {
           const ms = state.toolTimings.get(b.toolCallId);
@@ -514,34 +533,43 @@ export function Composer() {
         }
         return b;
       });
-      const content = blocks.filter((b) => b.type === 'text').map((b) => b.content).join('');
+
+      const content = blocks
+        .filter((b) => b.type === 'text')
+        .map((b) => b.content)
+        .join('');
+
       const now = new Date().toISOString();
+      const assistantMsg = {
+        id: `msg-${activeSessionId}-${Date.now()}`,
+        sessionId: activeSessionId,
+        role: 'assistant' as const,
+        status: 'complete' as const,
+        modelId: config?.defaultModelId ?? 'unknown',
+        content,
+        blocks,
+        usage: state.streamingUsage ?? undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
 
       queryClient.setQueryData(['session', activeSessionId], (old: any) => {
         if (!old) return old;
         return {
           ...old,
-          messages: [
-            ...(old.messages || []),
-            {
-              id: `msg-${activeSessionId}-${Date.now()}`,
-              sessionId: activeSessionId,
-              role: 'assistant',
-              status: 'complete',
-              modelId: config?.defaultModelId ?? 'unknown',
-              content,
-              blocks,
-              usage: state.streamingUsage ?? undefined,
-              createdAt: now,
-              updatedAt: now,
-            },
-          ],
+          messages: [...(old.messages || []), assistantMsg],
         };
       });
 
       clearStreamingBlocks();
       setIsStreaming(false);
       queryClient.invalidateQueries({ queryKey: ['files'] });
+
+      // Drain queue: send next queued item as a new message
+      const nextText = useComposerStore.getState().dequeueNext();
+      if (nextText) {
+        sendMutateRef.current(nextText);
+      }
     },
     onError: (error: Error, _content: string, context: any) => {
       // Rollback optimistic user message
@@ -551,13 +579,29 @@ export function Composer() {
       setStreamError(error.message || 'Failed to send message');
       clearStreamingBlocks();
       setIsStreaming(false);
+
+      // Drain queue for non-fatal errors
+      const isFatal = error.message?.toLowerCase().includes('session') &&
+                      error.message?.toLowerCase().includes('not found');
+      if (!isFatal) {
+        const nextText = useComposerStore.getState().dequeueNext();
+        if (nextText) {
+          sendMutateRef.current(nextText);
+        }
+      }
     },
   });
+
+  // Stable ref for sendMutation.mutate to avoid stale closure issues in callbacks
+  const sendMutateRef = useRef(sendMutation.mutate);
+  sendMutateRef.current = sendMutation.mutate;
 
   const handleSubmit = useCallback(() => {
     if (!value.trim() || !activeSessionId || sendMutation.isPending) return;
     sendMutation.mutate(value);
-  }, [value, activeSessionId, sendMutation]);
+    setValue('');
+    clearAttachments();
+  }, [value, activeSessionId, sendMutation, setValue, clearAttachments]);
 
   const handleSlashDetect = useCallback(
     (query: string) => {
@@ -726,10 +770,14 @@ export function Composer() {
           onMentionDetected={handleMentionDetect}
           onSlashDismiss={handleSlashDismiss}
           onMentionDismiss={handleMentionDismiss}
-          disabled={sendMutation.isPending}
+          disabled={!activeSessionId}
+          placeholder={isStreaming ? 'Press Enter to follow-up, or click Steer to redirect...' : undefined}
           showMenu={showSlashMenu || showMentionMenu}
           onMenuNavigate={handleMenuNavigate}
           onMenuSelect={handleMenuSelect}
+          isStreaming={isStreaming}
+          onSteerSubmit={handleSteerSubmit}
+          onFollowUpSubmit={handleFollowUpSubmit}
         />
 
         {/* Drag overlay */}
@@ -743,13 +791,16 @@ export function Composer() {
         )}
       </div>
 
+      {/* Queued steer / follow-up messages indicator */}
+      <QueueIndicator />
+
       {/* Divider */}
       <Separator className="mt-3" />
 
       {/* Bottom tools row */}
       <div className="flex items-center gap-1 px-3 py-2">
         <FileUploadButton
-          disabled={sendMutation.isPending}
+          disabled={isStreaming}
           onFilesSelected={handleFilesSelected}
         />
         <div className="h-4 w-px bg-border mx-1" />
@@ -770,15 +821,29 @@ export function Composer() {
         <CompactToggle compact={compactMode} onToggle={setCompactMode} />
         <div className="flex-1" />
         {isStreaming ? (
-          <Button
-            size="icon"
-            variant="destructive"
-            onClick={handleStopGeneration}
-            className="h-9 w-9 shrink-0"
-            aria-label="Stop generation"
-          >
-            <Square className="h-4 w-4" />
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSteerSubmit}
+              disabled={!value.trim()}
+              className="h-8 gap-1.5 text-xs"
+              aria-label="Steer (Ctrl+Enter)"
+            >
+              <CornerDownRight className="h-3.5 w-3.5" />
+              Steer
+              <kbd className="ml-0.5 text-[10px] opacity-60 hidden sm:inline">⌃↵</kbd>
+            </Button>
+            <Button
+              size="icon"
+              variant="destructive"
+              onClick={handleStopGeneration}
+              className="h-8 w-8 shrink-0"
+              aria-label="Stop generation"
+            >
+              <Square className="h-3.5 w-3.5" />
+            </Button>
+          </>
         ) : (
           <SendButton
             onClick={handleSubmit}

@@ -25,6 +25,19 @@ interface ComposerState {
   /** Editing mode: the UI message ID being edited (for reference) */
   editingMessageId: string | null;
 
+  /** Steering and follow-up message queues */
+  steeringQueue: string[];
+  followUpQueue: string[];
+
+  /** Enqueue a follow-up message to be sent after the current stream completes */
+  enqueueFollowUp: (text: string) => void;
+  /** Enqueue a steering message to be sent at the next tool turn boundary */
+  enqueueSteer: (text: string) => void;
+  /** Remove a queued item by type and index */
+  removeQueuedItem: (type: 'steer' | 'followUp', index: number) => void;
+  /** Dequeue and return the next item (steer first, then follow-up). Returns null if empty. */
+  dequeueNext: () => string | null;
+
   setValue: (value: string) => void;
   setCursorPosition: (pos: number) => void;
   setIsStreaming: (streaming: boolean) => void;
@@ -52,10 +65,12 @@ interface ComposerState {
   setEditingMessage: (entryId: string, messageId: string) => void;
   /** Exit edit mode: clear composer and editing state */
   clearEditingMessage: () => void;
+  /** Update the steering and follow-up queue state */
+  setQueues: (steering: string[], followUp: string[]) => void;
   reset: () => void;
 }
 
-export const useComposerStore = create<ComposerState>((set) => ({
+export const useComposerStore = create<ComposerState>((set, get) => ({
   value: '',
   cursorPosition: 0,
   isStreaming: false,
@@ -76,6 +91,8 @@ export const useComposerStore = create<ComposerState>((set) => ({
   triggerSend: 0,
   editingEntryId: null,
   editingMessageId: null,
+  steeringQueue: [],
+  followUpQueue: [],
 
   setSessionStats: (sessionStats) => set({ sessionStats }),
   setMessageTiming: (messageTiming) => set({ messageTiming }),
@@ -131,6 +148,30 @@ export const useComposerStore = create<ComposerState>((set) => ({
     set({ editingEntryId: entryId, editingMessageId: messageId }),
   clearEditingMessage: () =>
     set({ editingEntryId: null, editingMessageId: null }),
+  setQueues: (steering, followUp) => set({ steeringQueue: steering, followUpQueue: followUp }),
+  enqueueFollowUp: (text) => set((s) => ({ followUpQueue: [...s.followUpQueue, text] })),
+  enqueueSteer: (text) => set((s) => ({ steeringQueue: [...s.steeringQueue, text] })),
+  removeQueuedItem: (type, index) =>
+    set((s) => {
+      if (type === 'steer') {
+        return { steeringQueue: s.steeringQueue.filter((_, i) => i !== index) };
+      }
+      return { followUpQueue: s.followUpQueue.filter((_, i) => i !== index) };
+    }),
+  dequeueNext: (): string | null => {
+    const state = get();
+    if (state.steeringQueue.length > 0) {
+      const first = state.steeringQueue[0];
+      set({ steeringQueue: state.steeringQueue.slice(1) });
+      return first;
+    }
+    if (state.followUpQueue.length > 0) {
+      const first = state.followUpQueue[0];
+      set({ followUpQueue: state.followUpQueue.slice(1) });
+      return first;
+    }
+    return null;
+  },
   reset: () =>
     set({
       value: '',
@@ -153,5 +194,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
       triggerSend: 0,
       editingEntryId: null,
       editingMessageId: null,
+      steeringQueue: [],
+      followUpQueue: [],
     }),
 }));

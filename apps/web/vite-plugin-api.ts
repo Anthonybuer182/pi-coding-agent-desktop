@@ -215,6 +215,8 @@ async function handleRequest(server: ViteDevServer, method: string, params: any)
         case 'sendMessage': return chatService.sendMessage(params);
         case 'getMessages': return chatService.getMessages(params.sessionId, params.limit, params.offset);
         case 'stopGeneration': return chatService.stopGeneration(params.sessionId);
+        case 'steer': return chatService.steer(params.sessionId, params.content, params.images);
+        case 'followUp': return chatService.followUp(params.sessionId, params.content, params.images);
         case 'navigateTree': return chatService.navigateTree(params.sessionId, params.entryId, params.options);
       }
       break;

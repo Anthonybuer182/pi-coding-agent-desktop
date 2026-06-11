@@ -187,6 +187,9 @@ export function createRealChatService(cwd: string): ChatService {
         switch (event.type) {
           case 'message_start': {
             messageStartTime = Date.now();
+            // Signal frontend that a new message group is starting,
+            // so it creates fresh blocks instead of overwriting prior group.
+            safeChunk({ type: 'message_start' });
             // Fall through to process content like message_update
           }
           // eslint-disable-next-line no-fallthrough
@@ -413,6 +416,16 @@ export function createRealChatService(cwd: string): ChatService {
             }
             break;
           }
+          case 'queue_update': {
+            safeChunk({
+              type: 'queue_update',
+              queueState: {
+                steering: Array.isArray(event.steering) ? event.steering : [],
+                followUp: Array.isArray(event.followUp) ? event.followUp : [],
+              },
+            });
+            break;
+          }
         }
       });
 
@@ -520,6 +533,24 @@ export function createRealChatService(cwd: string): ChatService {
         } catch { /* ignore */ }
       }
       activeSessions.clear();
+    },
+
+    async steer(sessionId: string, content: string, images?: { name: string; mimeType: string; data: string }[]): Promise<void> {
+      const session = await getOrCreateAgentSession(sessionId);
+      await session.steer(content, images?.length ? images.map((img) => ({
+        type: 'image' as const,
+        data: img.data,
+        mimeType: img.mimeType,
+      })) : undefined);
+    },
+
+    async followUp(sessionId: string, content: string, images?: { name: string; mimeType: string; data: string }[]): Promise<void> {
+      const session = await getOrCreateAgentSession(sessionId);
+      await session.followUp(content, images?.length ? images.map((img) => ({
+        type: 'image' as const,
+        data: img.data,
+        mimeType: img.mimeType,
+      })) : undefined);
     },
 
     async navigateTree(sessionId: string, entryId: string, options?: { summarize?: boolean; customInstructions?: string; label?: string }): Promise<{ editorText?: string; cancelled: boolean }> {

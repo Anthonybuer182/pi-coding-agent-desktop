@@ -102,6 +102,16 @@ async function handleChat(action: string, params: unknown): Promise<unknown> {
       const chatService = createRealChatService(process.cwd());
       return chatService.stopGeneration(p.sessionId as string);
     }
+    case 'steer': {
+      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
+      const chatService = createRealChatService(process.cwd());
+      return chatService.steer(p.sessionId as string, p.content as string, p.images as any);
+    }
+    case 'followUp': {
+      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
+      const chatService = createRealChatService(process.cwd());
+      return chatService.followUp(p.sessionId as string, p.content as string, p.images as any);
+    }
     default: throw new Error(`Unknown chat action: ${action}`);
   }
 }

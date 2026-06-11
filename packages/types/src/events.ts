@@ -21,3 +21,12 @@ export interface TransportEventEmitter {
   off(event: TransportEventType, handler: TransportEventHandler): void;
   emit(event: TransportEvent): void;
 }
+
+/** Delivery mode for messages sent while the agent is working */
+export type StreamingBehavior = 'steer' | 'followUp';
+
+/** Current state of the agent's steering and follow-up message queues */
+export interface QueueState {
+  steering: string[];
+  followUp: string[];
+}

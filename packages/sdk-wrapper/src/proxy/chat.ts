@@ -65,6 +65,14 @@ export function createProxyChatService(transport: Transport): ChatService {
       return transport.request('chat.stopGeneration', { sessionId }) as ReturnType<ChatService['stopGeneration']>;
     },
 
+    async steer(sessionId: string, content: string, images?: { name: string; mimeType: string; data: string }[]) {
+      return transport.request('chat.steer', { sessionId, content, images }) as ReturnType<ChatService['steer']>;
+    },
+
+    async followUp(sessionId: string, content: string, images?: { name: string; mimeType: string; data: string }[]) {
+      return transport.request('chat.followUp', { sessionId, content, images }) as ReturnType<ChatService['followUp']>;
+    },
+
     async navigateTree(sessionId: string, entryId: string, options?: NavigateTreeOptions) {
       return transport.request('chat.navigateTree', { sessionId, entryId, options }) as Promise<NavigateTreeResult>;
     },
