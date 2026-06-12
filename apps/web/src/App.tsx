@@ -87,6 +87,7 @@ function AppContent() {
             <RightPanelTabs
               activeTab={rightPanelActiveTab}
               onTabChange={setRightPanelTab}
+              showDiffTab={false}
             />
           }
           leftSidebar={
