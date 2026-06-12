@@ -2,14 +2,66 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSDK } from '@/hooks/use-sdk';
 import * as pdfjsLib from 'pdfjs-dist';
-import { ChevronLeft, ChevronRight, FileText, Text, ExternalLink } from 'lucide-react';
+import { FileText, Text, Eye, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useUIStore } from '@/stores/ui-store';
 import { LoadingSpinner } from '@/components/common/loading-spinner';
 import { openWithSystemApp } from '@/lib/utils';
 
-// Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+function PDFPageCanvas({
+  pdfDoc,
+  pageNum,
+  onRendered,
+}: {
+  pdfDoc: pdfjsLib.PDFDocumentProxy | null;
+  pageNum: number;
+  onRendered: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null);
+  const renderedRef = useRef(false);
+
+  useEffect(() => {
+    if (!pdfDoc || renderedRef.current) return;
+    let cancelled = false;
+
+    async function render() {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      try {
+        const page = await pdfDoc!.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.5 });
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        renderTaskRef.current = page.render({ canvas, viewport });
+        await renderTaskRef.current.promise;
+        if (!cancelled) {
+          renderedRef.current = true;
+          onRendered();
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'RenderingCancelledException') return;
+        console.error(`Failed to render page ${pageNum}:`, err);
+      }
+    }
+
+    render();
+    return () => {
+      cancelled = true;
+      renderTaskRef.current?.cancel();
+    };
+  }, [pdfDoc, pageNum, onRendered]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="shadow-lg bg-white"
+      style={{ maxWidth: '100%', height: 'auto' }}
+    />
+  );
+}
 
 export function PDFPreview() {
   const sdk = useSDK();
@@ -23,128 +75,141 @@ export function PDFPreview() {
   });
 
   const [numPages, setNumPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [extractedText, setExtractedText] = useState<string | null>(null);
-  const [showTextPanel, setShowTextPanel] = useState(false);
+  const [mode, setMode] = useState<'preview' | 'text'>('preview');
+  const [renderedPages, setRenderedPages] = useState<Set<number>>(new Set());
+  const [activePage, setActivePage] = useState(1);
+  const [pageLabels, setPageLabels] = useState<string[]>([]);
+  const [pageTexts, setPageTexts] = useState<Map<number, string>>(new Map());
   const [extractingPage, setExtractingPage] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
-  const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null);
-
-  const renderPage = useCallback(async (pageNum: number, doc: pdfjsLib.PDFDocumentProxy) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Cancel any in-flight render
-    renderTaskRef.current?.cancel();
-
-    try {
-      const page = await doc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 1.5 });
-
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-
-      renderTaskRef.current = page.render({ canvas, viewport });
-      await renderTaskRef.current.promise;
-    } catch (err) {
-      if (err instanceof Error && err.name === 'RenderingCancelledException') return;
-      throw err;
-    }
-  }, []);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
-
     async function loadPDF() {
       if (!file?.content) return;
       setLoading(true);
       setError(null);
-
       try {
         let pdfData: ArrayBuffer;
         if (file.encoding === 'base64') {
           const binaryStr = atob(file.content);
           const bytes = new Uint8Array(binaryStr.length);
-          for (let i = 0; i < binaryStr.length; i++) {
-            bytes[i] = binaryStr.charCodeAt(i);
-          }
+          for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
           pdfData = bytes.buffer;
         } else {
-          // Legacy: assume content is a binary string or empty
           pdfData = new ArrayBuffer(0);
         }
-
         const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
-
         if (cancelled) return;
         pdfDocRef.current = pdf;
         setNumPages(pdf.numPages);
-        setCurrentPage(1);
-        if (pdf.numPages > 0) {
-          await renderPage(1, pdf);
-        }
+        setRenderedPages(new Set());
         setLoading(false);
+
+        // Extract first text line from each page for sidebar labels
+        const labels: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          if (cancelled) break;
+          try {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const firstText = content.items
+              .find((item): item is { str: string } => 'str' in item && item.str.trim().length > 0);
+            labels.push(firstText ? firstText.str.trim() : '');
+          } catch {
+            labels.push('');
+          }
+        }
+        if (!cancelled) setPageLabels(labels);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Failed to load PDF');
         setLoading(false);
       }
     }
-
     loadPDF();
+    return () => { cancelled = true; };
+  }, [file]);
 
+  const handlePageRendered = useCallback((pageNum: number) => {
+    setRenderedPages((prev) => {
+      if (prev.has(pageNum)) return prev;
+      const next = new Set(prev);
+      next.add(pageNum);
+      return next;
+    });
+  }, []);
+
+  // IntersectionObserver for scroll-sync
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || numPages === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let best: { page: number; ratio: number } = { page: -1, ratio: 0 };
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio > best.ratio) {
+            const page = Number((entry.target as HTMLElement).dataset.pageNum);
+            if (!isNaN(page)) {
+              best = { page, ratio: entry.intersectionRatio };
+            }
+          }
+        }
+        if (best.page >= 0) setActivePage(best.page);
+      },
+      { root: container, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] },
+    );
+
+    pageRefs.current.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [numPages]);
+
+  const scrollToPage = useCallback((pageNum: number) => {
+    const el = pageRefs.current.get(pageNum);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  // Auto-extract all pages' text when switching to Text mode
+  useEffect(() => {
+    if (mode !== 'text' || !pdfDocRef.current || pageTexts.size > 0) return;
+    let cancelled = false;
+    async function extract() {
+      setExtractingPage(true);
+      const texts = new Map<number, string>();
+      for (let i = 1; i <= numPages; i++) {
+        if (cancelled) break;
+        try {
+          const page = await pdfDocRef.current!.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items
+            .map((item) => ('str' in item ? item.str : ''))
+            .join(' ');
+          texts.set(i, pageText.trim());
+        } catch {
+          texts.set(i, '');
+        }
+      }
+      if (!cancelled) {
+        setPageTexts(texts);
+        setExtractingPage(false);
+      }
+    }
+    extract();
     return () => {
       cancelled = true;
-      renderTaskRef.current?.cancel();
     };
-  }, [file, renderPage]);
-
-  const goToPage = useCallback(
-    (pageNum: number) => {
-      if (!pdfDocRef.current || pageNum < 1 || pageNum > numPages) return;
-      setCurrentPage(pageNum);
-      renderPage(pageNum, pdfDocRef.current);
-    },
-    [numPages, renderPage],
-  );
-
-  const extractText = useCallback(async () => {
-    if (!pdfDocRef.current) return;
-    setExtractingPage(true);
-    setShowTextPanel(true);
-    try {
-      const page = await pdfDocRef.current.getPage(currentPage);
-      const content = await page.getTextContent();
-      const text = content.items
-        .map((item) => {
-          if ('str' in item) return item.str;
-          return '';
-        })
-        .join(' ');
-      setExtractedText(text.trim());
-    } catch {
-      setExtractedText('Failed to extract text.');
-    } finally {
-      setExtractingPage(false);
-    }
-  }, [currentPage]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      renderTaskRef.current?.cancel();
-    };
-  }, []);
+  }, [mode, numPages, pageTexts.size]);
 
   if (!activePreviewFilePath) return null;
   if (isFileLoading) return <LoadingSpinner message="Loading PDF..." />;
 
   const fileName = activePreviewFilePath.split('/').pop() ?? 'PDF Document';
 
-  // Show error or no-content state
   if (error) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -174,91 +239,125 @@ export function PDFPreview() {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30 shrink-0">
         <span className="text-xs text-muted-foreground truncate flex-1 mr-2">
-          {fileName}
+          {fileName} ({numPages} pages)
         </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => openWithSystemApp(activePreviewFilePath!, activeWorkspaceId!)}
-          className="h-7 text-xs gap-1.5 mr-1"
-          title="Open with system app"
-        >
-          <ExternalLink className="h-3 w-3" />
-        </Button>
         <div className="flex items-center gap-1">
           <Button
-            variant="ghost"
+            variant={mode === 'preview' ? 'secondary' : 'ghost'}
             size="sm"
-            onClick={extractText}
-            disabled={extractingPage}
+            onClick={() => setMode('preview')}
+            className="h-7 text-xs gap-1.5"
+          >
+            <Eye className="h-3 w-3" />
+            Preview
+          </Button>
+          <Button
+            variant={mode === 'text' ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setMode('text')}
             className="h-7 text-xs gap-1.5"
           >
             <Text className="h-3 w-3" />
-            {extractingPage ? 'Extracting...' : 'Extract Text'}
+            Text
           </Button>
           <Button
             variant="ghost"
-            size="icon-sm"
-            disabled={currentPage <= 1}
-            onClick={() => goToPage(currentPage - 1)}
-            aria-label="Previous page"
+            size="sm"
+            onClick={() => openWithSystemApp(activePreviewFilePath!, activeWorkspaceId!)}
+            className="h-7 text-xs gap-1.5"
+            title="Open with system app"
           >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-xs tabular-nums min-w-[3rem] text-center">
-            {currentPage} / {numPages}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            disabled={currentPage >= numPages}
-            onClick={() => goToPage(currentPage + 1)}
-            aria-label="Next page"
-          >
-            <ChevronRight className="h-4 w-4" />
+            <ExternalLink className="h-3 w-3" />
           </Button>
         </div>
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1 overflow-auto bg-muted/20 flex justify-center p-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
-          </div>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            className="shadow-lg bg-white"
-            style={{ maxWidth: '100%', height: 'auto' }}
-          />
-        )}
-      </div>
-
-      {/* Text extraction panel */}
-      {showTextPanel && (
-        <div className="shrink-0 border-t bg-muted/10">
-          <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/20">
-            <span className="text-xs font-medium text-muted-foreground">
-              Extracted Text (Page {currentPage})
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setShowTextPanel(false)}
-              className="h-5 w-5"
-              aria-label="Close text panel"
+      {/* Main: page sidebar + content */}
+      <div className="flex flex-1 min-h-0">
+        {/* Page sidebar */}
+        <div className="w-36 border-r bg-muted/10 overflow-y-auto shrink-0 p-2">
+          {Array.from({ length: numPages }, (_, i) => i + 1).map((p) => (
+            <button
+              key={p}
+              onClick={() => scrollToPage(p)}
+              className={`w-full text-left p-2 mb-1.5 rounded border text-xs transition-colors ${
+                p === activePage
+                  ? 'border-primary bg-primary/10 text-foreground'
+                  : 'border-transparent hover:bg-muted/30 text-muted-foreground'
+              }`}
             >
-              <Text className="h-3 w-3" />
-            </Button>
-          </div>
-          <div className="p-3 max-h-40 overflow-auto">
-            <pre className="text-xs whitespace-pre-wrap font-sans text-foreground leading-relaxed">
-              {extractedText || 'No text extracted yet.'}
-            </pre>
-          </div>
+              <div className="font-medium text-[11px] truncate">
+                {p}. {pageLabels[p - 1] || `Page ${p}`}
+              </div>
+            </button>
+          ))}
         </div>
-      )}
+
+        {/* Pages stacked vertically */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto bg-muted/20 p-4">
+          {loading || extractingPage ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
+            </div>
+          ) : mode === 'text' ? (
+            /* Text mode: selectable text blocks per page */
+            <div className="flex flex-col items-center gap-6 pb-8">
+              {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
+                <div
+                  key={pageNum}
+                  data-page-num={pageNum}
+                  ref={(el) => {
+                    if (el) pageRefs.current.set(pageNum, el);
+                    else pageRefs.current.delete(pageNum);
+                  }}
+                  className="flex flex-col items-center max-w-3xl w-full"
+                >
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Page {pageNum} of {numPages}
+                  </div>
+                  <div className="bg-white shadow-sm rounded-lg p-6 w-full">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap select-text cursor-text">
+                      {pageTexts.get(pageNum) || 'No text content on this page.'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* Preview mode: canvas rendering */
+            <div className="flex flex-col items-center gap-6 pb-8">
+              {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
+                <div
+                  key={pageNum}
+                  data-page-num={pageNum}
+                  ref={(el) => {
+                    if (el) pageRefs.current.set(pageNum, el);
+                    else pageRefs.current.delete(pageNum);
+                  }}
+                  className="flex flex-col items-center"
+                >
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Page {pageNum} of {numPages}
+                  </div>
+                  {!renderedPages.has(pageNum) && (
+                    <div
+                      className="bg-white shadow-lg flex items-center justify-center"
+                      style={{ width: 600, height: 800 }}
+                    >
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+                    </div>
+                  )}
+                  <PDFPageCanvas
+                    pdfDoc={pdfDocRef.current}
+                    pageNum={pageNum}
+                    onRendered={() => handlePageRendered(pageNum)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
