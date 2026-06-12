@@ -25,7 +25,7 @@ export function FileTree() {
     if (isPreviewableInRightPanel(path)) {
       setActivePreviewFile(path);
     } else {
-      openWithSystemApp(path);
+      openWithSystemApp(path, activeWorkspaceId!);
     }
   };
 

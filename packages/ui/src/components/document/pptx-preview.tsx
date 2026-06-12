@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSDK } from '@/hooks/use-sdk';
 import { useUIStore } from '@/stores/ui-store';
-import { ChevronLeft, ChevronRight, Presentation } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Presentation, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/common/loading-spinner';
+import { openWithSystemApp } from '@/lib/utils';
 
 interface SlideInfo {
   index: number;
@@ -54,6 +55,15 @@ export function PptxPreview() {
         <span className="text-xs text-muted-foreground truncate flex-1 mr-2">
           {fileName}
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => openWithSystemApp(activePreviewFilePath!, activeWorkspaceId!)}
+          className="h-7 text-xs gap-1.5 mr-1"
+          title="Open with system app"
+        >
+          <ExternalLink className="h-3 w-3" />
+        </Button>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"

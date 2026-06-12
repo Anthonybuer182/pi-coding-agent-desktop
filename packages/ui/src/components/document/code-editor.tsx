@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSDK } from '@/hooks/use-sdk';
 import { useUIStore } from '@/stores/ui-store';
@@ -11,7 +11,7 @@ import type { OnMount } from '@monaco-editor/react';
 // Point Monaco to local node_modules CDN
 loader.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
 
-export function CodeEditor() {
+export function CodeEditor({ headerActions }: { headerActions?: ReactNode }) {
   const sdk = useSDK();
   const queryClient = useQueryClient();
   const activeWorkspaceId = useUIStore((s) => s.activeWorkspaceId);
@@ -85,6 +85,7 @@ export function CodeEditor() {
         {isDirty && (
           <span className="h-1.5 w-1.5 rounded-full bg-orange-400" title="Unsaved changes" />
         )}
+        {headerActions}
         <Button
           variant="ghost"
           size="sm"

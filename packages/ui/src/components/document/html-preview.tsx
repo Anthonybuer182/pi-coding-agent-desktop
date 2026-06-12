@@ -37,7 +37,21 @@ export function HTMLPreview() {
   const fileName = activePreviewFilePath.split('/').pop() ?? 'HTML Page';
 
   if (mode === 'source') {
-    return <CodeEditor />;
+    return (
+      <CodeEditor
+        headerActions={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setMode('preview')}
+            className="h-6 gap-1 text-xs"
+          >
+            <Eye className="h-3 w-3" />
+            Preview
+          </Button>
+        }
+      />
+    );
   }
 
   return (

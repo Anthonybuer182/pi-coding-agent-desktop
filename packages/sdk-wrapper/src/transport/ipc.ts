@@ -30,7 +30,15 @@ export class IPCTransport implements Transport {
     if (!this.ipc || !this.connected) {
       throw new Error('IPC transport not connected');
     }
-    return this.ipc.invoke('pi:sdk:request', { id: generateRequestId(), method, params });
+    const response = await this.ipc.invoke('pi:sdk:request', { id: generateRequestId(), method, params }) as {
+      id: string;
+      result?: unknown;
+      error?: { code: number; message: string };
+    };
+    if (response.error) {
+      throw new Error(response.error.message);
+    }
+    return response.result;
   }
 
   on(event: TransportEventType, handler: TransportEventHandler): void {

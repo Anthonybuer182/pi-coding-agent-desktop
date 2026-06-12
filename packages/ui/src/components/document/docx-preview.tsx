@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSDK } from '@/hooks/use-sdk';
 import { useUIStore } from '@/stores/ui-store';
-import { Eye, FileText, AlignLeft } from 'lucide-react';
+import { Eye, FileText, AlignLeft, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/common/loading-spinner';
+import { openWithSystemApp } from '@/lib/utils';
 
 export function DocxPreview() {
   const sdk = useSDK();
@@ -60,6 +61,15 @@ export function DocxPreview() {
           >
             <AlignLeft className="h-3 w-3" />
             Text
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => openWithSystemApp(activePreviewFilePath!, activeWorkspaceId!)}
+            className="h-7 text-xs gap-1.5"
+            title="Open with system app"
+          >
+            <ExternalLink className="h-3 w-3" />
           </Button>
         </div>
       </div>

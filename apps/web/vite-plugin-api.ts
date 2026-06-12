@@ -4,7 +4,8 @@
  */
 import type { Plugin, ViteDevServer } from 'vite';
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import { extname } from 'path';
 
 function openNativeFolderPicker(): string | null {
   const platform = process.platform;
@@ -118,6 +119,42 @@ function setupApiRoutes(server: ViteDevServer): void {
           res.end();
         }
       });
+      return;
+    }
+
+    // File download endpoint (web fallback for "open with system app")
+    if (req.method === 'GET' && req.url?.startsWith('/api/file/download')) {
+      try {
+        const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
+        const workspaceId = url.searchParams.get('workspaceId');
+        const filePath = url.searchParams.get('path');
+        if (!workspaceId || !filePath) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing workspaceId or path' }));
+          return;
+        }
+        await loadAdapters(server);
+        const fileBuffer = readFileSync(filePath);
+        const fileName = filePath.split('/').pop() ?? 'download';
+        const ext = extname(filePath).toLowerCase();
+        const mimeTypes: Record<string, string> = {
+          '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          '.pdf': 'application/pdf',
+        };
+        const contentType = mimeTypes[ext] ?? 'application/octet-stream';
+        res.writeHead(200, {
+          'Content-Type': contentType,
+          'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+          'Content-Length': fileBuffer.length,
+        });
+        res.end(fileBuffer);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Download error';
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: message }));
+      }
       return;
     }
 

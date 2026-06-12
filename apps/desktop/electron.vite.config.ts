@@ -4,7 +4,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({
+      exclude: ['@pi/sdk-wrapper', '@earendil-works/pi-coding-agent'],
+    })],
     resolve: {
       alias: {
         '@main': resolve(__dirname, 'src/main'),

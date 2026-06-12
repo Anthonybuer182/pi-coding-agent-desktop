@@ -45,16 +45,18 @@ export function isPreviewableInRightPanel(filePath: string): boolean {
 }
 
 /** Open a file with the system's default application */
-export function openWithSystemApp(filePath: string): void {
+export function openWithSystemApp(filePath: string, workspaceId?: string): void {
   const electronAPI = (window as unknown as { electronAPI?: { shell?: { openPath: (p: string) => Promise<void> } } }).electronAPI;
   if (electronAPI?.shell?.openPath) {
     electronAPI.shell.openPath(filePath).catch((err) => {
       console.error('Failed to open file:', err);
     });
   } else {
-    // Web fallback: try to open via download
+    // Web fallback: download via API, browser will prompt to open with system app
+    const url = `/api/file/download?path=${encodeURIComponent(filePath)}`;
+    const finalUrl = workspaceId ? `${url}&workspaceId=${encodeURIComponent(workspaceId)}` : url;
     const a = document.createElement('a');
-    a.href = `file://${filePath}`;
+    a.href = finalUrl;
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();

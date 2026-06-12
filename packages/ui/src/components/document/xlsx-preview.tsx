@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSDK } from '@/hooks/use-sdk';
 import { useUIStore } from '@/stores/ui-store';
-import { Download } from 'lucide-react';
+import { Download, ExternalLink } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/common/loading-spinner';
+import { openWithSystemApp } from '@/lib/utils';
 
 interface SheetInfo {
   name: string;
@@ -49,6 +51,15 @@ export function XlsxPreview() {
         <span className="text-xs text-muted-foreground truncate flex-1 mr-2">
           {fileName}
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => openWithSystemApp(activePreviewFilePath!, activeWorkspaceId!)}
+          className="h-7 text-xs gap-1.5"
+          title="Open with system app"
+        >
+          <ExternalLink className="h-3 w-3" />
+        </Button>
       </div>
 
       {/* Sheet tabs */}
