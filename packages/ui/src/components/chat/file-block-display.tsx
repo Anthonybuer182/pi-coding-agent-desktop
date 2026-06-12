@@ -11,8 +11,9 @@ import {
   Download,
   Eye,
   EyeOff,
+  ExternalLink,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, isPreviewableInRightPanel } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui-store';
 import type { FileBlock } from '@pi/types';
 
@@ -83,6 +84,7 @@ export function FileBlockDisplay({ block }: FileBlockDisplayProps) {
   const Icon = getFileIcon(block.mimeType, block.fileName);
   const showPreview = PRESENTABLE_TEXT_TYPES.has(block.mimeType) && block.data;
   const expandable = isExpandable(block.mimeType);
+  const canOpenInPanel = !!block.workspacePath && isPreviewableInRightPanel(block.workspacePath);
 
   let previewText = '';
   if (showPreview && block.data) {
@@ -99,12 +101,23 @@ export function FileBlockDisplay({ block }: FileBlockDisplayProps) {
     }
   }
 
+  const handleClick = () => {
+    if (canOpenInPanel && block.workspacePath) {
+      setActivePreviewFile(block.workspacePath);
+    } else {
+      setExpanded(!expanded);
+    }
+  };
+
   return (
     <div className="my-1 rounded-lg border bg-muted/30 overflow-hidden">
       {/* File header */}
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2.5 w-full px-3 py-2.5 hover:bg-muted/50 transition-colors text-left"
+        onClick={handleClick}
+        className={cn(
+          'flex items-center gap-2.5 w-full px-3 py-2.5 hover:bg-muted/50 transition-colors text-left',
+          canOpenInPanel && 'cursor-pointer',
+        )}
       >
         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <div className="flex-1 min-w-0">
@@ -114,7 +127,10 @@ export function FileBlockDisplay({ block }: FileBlockDisplayProps) {
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {expandable && (
+          {canOpenInPanel && (
+            <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
+          )}
+          {!canOpenInPanel && expandable && (
             expanded
               ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
               : <Eye className="h-3.5 w-3.5 text-muted-foreground" />

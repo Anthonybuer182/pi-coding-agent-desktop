@@ -49,7 +49,7 @@ export const useUIStore = create<UIState>()(
 
       setActiveWorkspace: (id) => set({ activeWorkspaceId: id, activeSessionId: null }),
       setActiveSession: (id) => set({ activeSessionId: id }),
-      setActivePreviewFile: (path) => set({ activePreviewFilePath: path, rightPanelActiveTab: 'preview' }),
+      setActivePreviewFile: (path) => set({ activePreviewFilePath: path, rightPanelActiveTab: 'preview', rightPanelOpen: true }),
       setActiveDiff: (id) => set({ activeDiffId: id, rightPanelActiveTab: 'diff' }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),

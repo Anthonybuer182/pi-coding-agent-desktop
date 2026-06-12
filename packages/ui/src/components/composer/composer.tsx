@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, useRef, useEffect, DragEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Square, Upload, CornerDownRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, isPreviewableInRightPanel } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useSDK } from '@/hooks/use-sdk';
@@ -481,6 +481,10 @@ export function Composer() {
               }
             } else {
               addStreamingBlock(block);
+              // Auto-switch right panel to preview files as they are created
+              if (block.type === 'file' && block.workspacePath && isPreviewableInRightPanel(block.workspacePath)) {
+                setActivePreviewFile(block.workspacePath);
+              }
             }
           } else if (chunk.type === 'text' && chunk.content) {
             const blocks = useComposerStore.getState().streamingBlocks;

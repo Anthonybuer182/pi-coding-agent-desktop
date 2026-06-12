@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type { ChatService, SendMessageParams, StreamChunk } from '../services/chat.js';
 import type { Message, AssistantMessage, ContentBlock, TokenUsage, ContextUsageInfo, SessionStatsInfo, MessageTiming } from '@pi/types';
 import { createAgentSession, SessionManager, ModelRegistry, AuthStorage, DefaultResourceLoader, getAgentDir } from '@earendil-works/pi-coding-agent';
@@ -52,6 +54,96 @@ export function createRealChatService(cwd: string): ChatService {
       cacheWriteTokens: usage.cacheWrite ?? 0,
       cost: usage.cost?.total ?? 0,
     };
+  }
+
+  /** Map file extension to MIME type */
+  function getMimeType(filePath: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.js': 'text/javascript',
+      '.ts': 'text/typescript',
+      '.jsx': 'text/javascript',
+      '.tsx': 'text/typescript',
+      '.json': 'application/json',
+      '.xml': 'text/xml',
+      '.yaml': 'application/x-yaml',
+      '.yml': 'application/x-yaml',
+      '.py': 'text/x-python',
+      '.rs': 'text/x-rust',
+      '.go': 'text/x-go',
+      '.java': 'text/x-java',
+      '.c': 'text/x-c',
+      '.cpp': 'text/x-c++',
+      '.h': 'text/x-c',
+      '.sh': 'application/x-sh',
+      '.pdf': 'application/pdf',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.mp4': 'video/mp4',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      '.zip': 'application/zip',
+    };
+    return mimeMap[ext] || 'application/octet-stream';
+  }
+
+  /** Detect file paths written by tools, returning existing files with stats */
+  function detectWrittenFiles(
+    toolName: string,
+    args: Record<string, unknown> | undefined,
+    resultText: string,
+    workspaceCwd: string | undefined,
+  ): Array<{ absPath: string; relPath: string; size: number; mimeType: string }> {
+    const files: Array<{ absPath: string; relPath: string; size: number; mimeType: string }> = [];
+    const cwd = workspaceCwd || process.cwd();
+
+    // Helper to try adding a file candidate
+    const tryAdd = (candidate: string) => {
+      if (!candidate) return;
+      const absPath = path.isAbsolute(candidate) ? candidate : path.resolve(cwd, candidate);
+      if (!fs.existsSync(absPath)) return;
+      const stat = fs.statSync(absPath);
+      if (!stat.isFile()) return;
+      if (files.some((f) => f.absPath === absPath)) return;
+      const relPath = path.relative(cwd, absPath);
+      // Only include files under the workspace
+      if (relPath.startsWith('..')) return;
+      files.push({ absPath, relPath, size: stat.size, mimeType: getMimeType(absPath) });
+    };
+
+    // Known file-writing tools: extract path from args
+    const WRITE_TOOLS = new Set(['write', 'write_to_file', 'Write', 'mcp__filesystem__write_file']);
+    if (WRITE_TOOLS.has(toolName) && args) {
+      const filePath = (args as any).path || (args as any).filePath || (args as any).file_path;
+      if (filePath && typeof filePath === 'string') {
+        tryAdd(filePath);
+        return files;
+      }
+    }
+
+    // For other tools (Bash, officecli, etc.): parse result text for resolved file paths
+    if (resultText && cwd) {
+      // First alt: simple paths without spaces (most filenames, relative or absolute)
+      // Second alt: absolute paths that may contain spaces (start with /)
+      const pathPattern = /(?<=^|\s|at\s+|to\s+|:\s*)([\w\-./]+\.\w{2,6}|\/[\w\-./\\ ]+\.\w{2,6})\b/g;
+      let match;
+      while ((match = pathPattern.exec(resultText)) !== null) {
+        tryAdd(match[1].trim());
+      }
+    }
+
+    return files;
   }
 
   async function createResourceLoader(workCwd: string) {
@@ -166,6 +258,7 @@ export function createRealChatService(cwd: string): ChatService {
     ): Promise<Message> {
       const session = await getOrCreateAgentSession(params.sessionId, params.workspaceCwd);
       const sessionKey = params.sessionId || 'default';
+      const workspaceCwd = params.workspaceCwd;
 
       // Guard to prevent writing to a closed SSE stream
       let streamActive = true;
@@ -180,6 +273,7 @@ export function createRealChatService(cwd: string): ChatService {
       let messageEndTime = 0;
       let outputText = '';
       const toolStartTimes = new Map<string, number>();
+      const toolArgs = new Map<string, Record<string, unknown>>();
 
       const unsubscribe = session.subscribe((event: any) => {
         // Skip sending chunks if stream is already closed
@@ -242,6 +336,10 @@ export function createRealChatService(cwd: string): ChatService {
                     if (!block.toolCallId) break;
                     // block.input carries tool arguments from the SDK
                     const args = (block as any).input ?? (block as any).args;
+                    // Store args for file detection in tool_execution_end
+                    if (block.toolCallId && args) {
+                      toolArgs.set(block.toolCallId, typeof args === 'object' ? args : undefined);
+                    }
                     safeChunk({
                       type: 'block',
                       block: {
@@ -264,6 +362,7 @@ export function createRealChatService(cwd: string): ChatService {
           }
           case 'tool_execution_start': {
             toolStartTimes.set(event.toolCallId, Date.now());
+            toolArgs.set(event.toolCallId, (event as any).args);
             safeChunk({
               type: 'block',
               block: {
@@ -280,7 +379,9 @@ export function createRealChatService(cwd: string): ChatService {
           case 'tool_execution_end': {
             const startTime = toolStartTimes.get(event.toolCallId);
             const durationMs = startTime ? Date.now() - startTime : undefined;
+            const storedArgs = toolArgs.get(event.toolCallId);
             toolStartTimes.delete(event.toolCallId);
+            toolArgs.delete(event.toolCallId);
 
             // event.result is { content: Array<{type, text}>, isError: boolean }
             // Extract text from content blocks for display
@@ -324,6 +425,31 @@ export function createRealChatService(cwd: string): ChatService {
                     },
                   });
                 }
+              }
+            }
+
+            // Emit file blocks for files written by tools
+            const effectiveArgs = storedArgs || (event as any).args;
+            if (!event.isError && effectiveArgs) {
+              const writtenFiles = detectWrittenFiles(
+                event.toolName,
+                effectiveArgs,
+                resultText,
+                workspaceCwd,
+              );
+              for (const file of writtenFiles) {
+                safeChunk({
+                  type: 'block',
+                  block: {
+                    id: `b-ter-file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                    type: 'file',
+                    content: path.basename(file.absPath),
+                    mimeType: file.mimeType,
+                    fileName: path.basename(file.absPath),
+                    fileSize: file.size,
+                    workspacePath: file.absPath,
+                  },
+                });
               }
             }
 

@@ -117,9 +117,10 @@ export function PDFPreview() {
           try {
             const page = await pdf.getPage(i);
             const content = await page.getTextContent();
-            const firstText = content.items
-              .find((item): item is { str: string } => 'str' in item && item.str.trim().length > 0);
-            labels.push(firstText ? firstText.str.trim() : '');
+            const firstTextItem = content.items.find(
+              (item) => 'str' in item && typeof item.str === 'string' && item.str.trim().length > 0,
+            );
+            labels.push(firstTextItem ? (firstTextItem as any).str.trim() : '');
           } catch {
             labels.push('');
           }

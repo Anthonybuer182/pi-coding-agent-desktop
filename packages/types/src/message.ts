@@ -24,6 +24,7 @@ export interface ContentBlock {
   height?: number;
   fileName?: string;
   fileSize?: number;
+  workspacePath?: string;
   durationMs?: number;
 }
 
@@ -66,6 +67,8 @@ export interface FileBlock {
   data?: string;         // base64 data (for displayable files)
   fileName?: string;
   fileSize?: number;
+  /** Workspace-relative path for opening file in right-panel preview */
+  workspacePath?: string;
 }
 
 export interface Message {

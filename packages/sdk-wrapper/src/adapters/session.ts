@@ -6,7 +6,8 @@ import {
   type SessionEntry,
   type SessionInfo,
 } from '@earendil-works/pi-coding-agent';
-import { existsSync, unlinkSync } from 'fs';
+import { existsSync, unlinkSync, statSync } from 'fs';
+import * as path from 'path';
 
 function extractTitleFromMessage(msg: any): string | undefined {
   const content = msg.content;
@@ -51,6 +52,69 @@ function extractTextFromContent(content: unknown): string {
       .join('\n');
   }
   return JSON.stringify(content);
+}
+
+/** Map file extension to MIME type */
+function getMimeTypeFromPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.html': 'text/html',
+    '.htm': 'text/html',
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.ts': 'application/typescript',
+    '.json': 'application/json',
+    '.csv': 'text/csv',
+    '.xml': 'application/xml',
+    '.yaml': 'application/x-yaml',
+    '.yml': 'application/x-yaml',
+    '.pdf': 'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.zip': 'application/zip',
+  };
+  return mimeMap[ext] || 'application/octet-stream';
+}
+
+/** Detect files written by tools from result text and cwd */
+function detectFilesFromResult(
+  resultText: string,
+  cwd: string,
+): Array<{ absPath: string; size: number; mimeType: string }> {
+  const files: Array<{ absPath: string; size: number; mimeType: string }> = [];
+  if (!resultText || !cwd) return files;
+
+  // Match file paths in patterns like "Created at /path/file.ext", "saved to /path/file.ext", etc.
+  // Also matches relative paths like "Created: test.pptx"
+  // First alt: simple paths without spaces (most filenames, relative or absolute)
+  // Second alt: absolute paths that may contain spaces (start with /)
+  const pathPattern = /(?<=^|\s|at\s+|to\s+|:\s*)([\w\-./]+\.\w{2,6}|\/[\w\-./\\ ]+\.\w{2,6})\b/g;
+  let match;
+  while ((match = pathPattern.exec(resultText)) !== null) {
+    const raw = match[1].trim();
+    // Resolve relative paths against cwd, keep absolute paths as-is
+    const candidate = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
+    if (!candidate.startsWith(cwd)) continue;
+    if (!existsSync(candidate)) continue;
+    try {
+      const stat = statSync(candidate);
+      if (!stat.isFile()) continue;
+      if (files.some((f) => f.absPath === candidate)) continue;
+      files.push({ absPath: candidate, size: stat.size, mimeType: getMimeTypeFromPath(candidate) });
+    } catch {
+      // File may have been deleted between existsSync and statSync
+      continue;
+    }
+  }
+  return files;
 }
 
 // === Conversion: AgentMessage → ContentBlock[] ===
@@ -430,7 +494,30 @@ export function createRealSessionService(): SessionService {
         if (message) messages.push(message);
       }
 
+      // Post-process: add file blocks for files detected in tool results
       const cwd = header?.cwd || sm.getCwd();
+      for (const message of messages) {
+        const fileBlocks: ContentBlock[] = [];
+        for (const block of message.blocks) {
+          if (block.type === 'tool_result' && block.result) {
+            const files = detectFilesFromResult(block.result, cwd);
+            for (const file of files) {
+              fileBlocks.push({
+                id: `b-file-sess-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                type: 'file',
+                content: path.basename(file.absPath),
+                mimeType: file.mimeType,
+                fileName: path.basename(file.absPath),
+                fileSize: file.size,
+                workspacePath: file.absPath,
+              });
+            }
+          }
+        }
+        if (fileBlocks.length > 0) {
+          message.blocks.push(...fileBlocks);
+        }
+      }
       const sessionName = sm.getSessionName();
       const title = (typeof sessionName === 'string' && sessionName ? sessionName : undefined)
         || (messageEntries.length > 0 ? extractTitleFromMessage(messageEntries[0].message) : undefined)
