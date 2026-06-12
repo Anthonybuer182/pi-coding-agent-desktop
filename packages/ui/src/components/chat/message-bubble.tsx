@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Message, ContentBlock, ThinkingBlock as ThinkingBlockType, ToolCallBlock, ToolResultBlock, ImageBlock, FileBlock, AssistantMessage, TokenUsage, ContextUsageInfo, MessageTiming } from '@pi/types';
 import { cn } from '@/lib/utils';
 import { UserIcon, Bot, Clock, Zap, FileText, Copy, Pencil, Check, X } from 'lucide-react';
@@ -150,6 +150,7 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
   const [editContent, setEditContent] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isUser = message.role === 'user';
   const hasBlocks = message.blocks && message.blocks.length > 0;
   const isAssistant = message.role === 'assistant';
@@ -175,6 +176,18 @@ export function MessageBubble({
       setTimeout(() => setCopied(false), 2000);
     } catch { /* clipboard may not be available */ }
   };
+
+  // Auto-resize textarea and place cursor at end
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+      // Move cursor to end of content
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    }
+  }, [editContent, isCurrentlyEditing]);
 
   const handleStartEdit = () => {
     setEditContent(message.content);
@@ -205,14 +218,15 @@ export function MessageBubble({
             {isCurrentlyEditing ? (
               <div className="flex flex-col gap-1.5 w-full">
                 <textarea
+                  ref={textareaRef}
                   className={cn(
                     'rounded-lg px-4 py-2 text-sm bg-primary text-primary-foreground w-full min-w-[260px]',
                     'resize-none outline-none ring-2 ring-primary/50',
-                    'placeholder:text-primary-foreground/50',
+                    'placeholder:text-primary-foreground/50 overflow-hidden',
                   )}
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
-                  rows={Math.max(2, editContent.split('\n').length)}
+                  rows={1}
                   autoFocus
                 />
                 <div className={cn('flex items-center gap-1', isUser && 'justify-end')}>
