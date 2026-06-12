@@ -163,7 +163,7 @@ export function ChatTimeline() {
   // Edit: enter inline editing mode for a user message
   const handleEditMessage = useCallback((message: Message) => {
     if (message.role === 'user' && message.entryId) {
-      setEditingMessage(message.entryId, message.id);
+      setEditingMessage(message.entryId, message.id, message.content);
     }
   }, [setEditingMessage]);
 
@@ -185,7 +185,7 @@ export function ChatTimeline() {
     }
 
     // ② Set edit state and trigger send (composer's mutationFn handles navigateTree + sendMessageStream)
-    setEditingMessage(message.entryId, message.id);
+    setEditingMessage(message.entryId, message.id, '');
     setTriggerSend(newContent);
     // ③ Immediately clear visual edit state so the original bubble reappears
     //    (editingEntryId is preserved for navigateTree inside the composer mutation)

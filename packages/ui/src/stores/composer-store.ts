@@ -24,6 +24,8 @@ interface ComposerState {
   editingEntryId: string | null;
   /** Editing mode: the UI message ID being edited (for reference) */
   editingMessageId: string | null;
+  /** Editing mode: current text content of the editing textarea */
+  editingContent: string;
 
   /** Steering and follow-up message queues */
   steeringQueue: string[];
@@ -62,7 +64,9 @@ interface ComposerState {
   setStreamError: (error: string | null) => void;
   setTriggerSend: (content: string) => void;
   /** Enter edit mode: track entry and message IDs for navigateTree on send */
-  setEditingMessage: (entryId: string, messageId: string) => void;
+  setEditingMessage: (entryId: string, messageId: string, initialContent: string) => void;
+  /** Set editing content (e.g. as user types in the textarea) */
+  setEditingContent: (content: string) => void;
   /** Exit edit mode: clear composer and editing state */
   clearEditingMessage: () => void;
   /** Update the steering and follow-up queue state */
@@ -91,6 +95,7 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
   triggerSend: 0,
   editingEntryId: null,
   editingMessageId: null,
+  editingContent: '',
   steeringQueue: [],
   followUpQueue: [],
 
@@ -144,10 +149,11 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
   setContextUsage: (contextUsage) => set({ contextUsage }),
   setStreamError: (streamError) => set({ streamError }),
   setTriggerSend: (content) => set((s) => ({ value: content, triggerSend: s.triggerSend + 1 })),
-  setEditingMessage: (entryId, messageId) =>
-    set({ editingEntryId: entryId, editingMessageId: messageId }),
+  setEditingMessage: (entryId, messageId, initialContent) =>
+    set({ editingEntryId: entryId, editingMessageId: messageId, editingContent: initialContent }),
+  setEditingContent: (content) => set({ editingContent: content }),
   clearEditingMessage: () =>
-    set({ editingEntryId: null, editingMessageId: null }),
+    set({ editingEntryId: null, editingMessageId: null, editingContent: '' }),
   setQueues: (steering, followUp) => set({ steeringQueue: steering, followUpQueue: followUp }),
   enqueueFollowUp: (text) => set((s) => ({ followUpQueue: [...s.followUpQueue, text] })),
   enqueueSteer: (text) => set((s) => ({ steeringQueue: [...s.steeringQueue, text] })),
@@ -194,6 +200,7 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
       triggerSend: 0,
       editingEntryId: null,
       editingMessageId: null,
+      editingContent: '',
       steeringQueue: [],
       followUpQueue: [],
     }),

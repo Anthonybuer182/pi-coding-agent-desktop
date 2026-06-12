@@ -149,12 +149,13 @@ export function MessageBubble({
   onCancelEdit,
 }: MessageBubbleProps) {
   const [copied, setCopied] = useState(false);
-  const [editContent, setEditContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isUser = message.role === 'user';
   const hasBlocks = message.blocks && message.blocks.length > 0;
   const isAssistant = message.role === 'assistant';
   const editingMessageId = useComposerStore((s) => s.editingMessageId);
+  const editingContent = useComposerStore((s) => s.editingContent);
+  const setEditingContent = useComposerStore((s) => s.setEditingContent);
   const isCurrentlyEditing = isUser && editingMessageId === message.id;
 
   // Only show per-message metrics for assistant messages
@@ -187,19 +188,17 @@ export function MessageBubble({
       const len = el.value.length;
       el.setSelectionRange(len, len);
     }
-  }, [editContent, isCurrentlyEditing]);
+  }, [editingContent, isCurrentlyEditing]);
 
   const handleStartEdit = () => {
-    setEditContent(message.content);
     onEditMessage?.(message);
   };
 
   const handleConfirmEdit = () => {
-    onConfirmEdit?.(message, editContent);
+    onConfirmEdit?.(message, editingContent);
   };
 
   const handleCancelEdit = () => {
-    setEditContent('');
     onCancelEdit?.();
   };
 
@@ -224,8 +223,8 @@ export function MessageBubble({
                     'resize-none outline-none ring-2 ring-primary/50',
                     'placeholder:text-primary-foreground/50 overflow-hidden',
                   )}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
+                  value={editingContent}
+                  onChange={(e) => setEditingContent(e.target.value)}
                   rows={1}
                   autoFocus
                 />
