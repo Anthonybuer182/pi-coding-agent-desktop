@@ -126,7 +126,7 @@ function MessageRow({
             ) : (
               <ChevronRight className="h-3 w-3" />
             )}
-            <span>工具调用详情</span>
+            <span>Tool Call Details</span>
           </button>
           {expanded && (
             <div className="px-3 pb-2 space-y-1">
@@ -241,7 +241,7 @@ export function SessionTree() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-2 p-4">
         <GitBranch className="h-8 w-8 opacity-30" />
-        <p>请先选择一个会话</p>
+        <p>Please select a session first</p>
       </div>
     );
   }
@@ -250,7 +250,7 @@ export function SessionTree() {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>加载会话树...</span>
+        <span>Loading session tree...</span>
       </div>
     );
   }
@@ -258,7 +258,7 @@ export function SessionTree() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-2 p-4">
-        <p className="text-red-400">加载失败</p>
+        <p className="text-red-400">Loading failed</p>
         <p className="text-[11px]">{(error as Error).message}</p>
       </div>
     );
@@ -269,16 +269,16 @@ export function SessionTree() {
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b text-xs text-muted-foreground shrink-0">
         <GitBranch className="h-3.5 w-3.5" />
-        <span className="font-medium">会话树</span>
+        <span className="font-medium">Session Tree</span>
         {streamingInCurrentSession && (
           <span className="flex items-center gap-1 text-emerald-400">
             <RefreshCw className="h-3 w-3 animate-spin" />
-            <span className="text-[10px]">自动刷新</span>
+            <span className="text-[10px]">Auto Refresh</span>
           </span>
         )}
         {messageNodes.length > 0 && !streamingInCurrentSession && (
           <span className="text-[10px] text-muted-foreground/60 ml-auto">
-            {messageNodes.length} 条消息
+            {messageNodes.length} messages
           </span>
         )}
       </div>
@@ -287,7 +287,7 @@ export function SessionTree() {
       <div className="flex-1 overflow-auto">
         {messageNodes.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
-            暂无消息
+            No messages yet
           </div>
         ) : (
           messageNodes.map((node) => (

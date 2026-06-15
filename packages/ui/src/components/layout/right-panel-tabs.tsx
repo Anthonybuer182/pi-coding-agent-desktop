@@ -12,13 +12,13 @@ export function RightPanelTabs({ activeTab = 'preview', onTabChange, showDiffTab
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
       <div className="border-b px-2 py-1">
         <TabsList className="w-full">
-          <TabsTrigger value="preview" className="flex-1">预览</TabsTrigger>
+          <TabsTrigger value="preview" className="flex-1">Preview</TabsTrigger>
           {showDiffTab && (
-            <TabsTrigger value="diff" className="flex-1">差异</TabsTrigger>
+            <TabsTrigger value="diff" className="flex-1">Diff</TabsTrigger>
           )}
           <TabsTrigger value="settings" className="flex-1">
             <Settings className="h-3 w-3 mr-1" />
-            设置
+            Settings
           </TabsTrigger>
         </TabsList>
       </div>

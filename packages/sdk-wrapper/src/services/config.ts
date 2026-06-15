@@ -4,18 +4,18 @@ export interface ConfigService {
   get(): Promise<Config>;
   update(data: Partial<Config>): Promise<Config>;
   listModels(): Promise<ModelInfo[]>;
-  /** 读取 models.json 完整配置 */
+  /** Read full models.json configuration */
   getModelsConfig(): Promise<ModelsConfig>;
-  /** 写入 models.json 完整配置 */
+  /** Write full models.json configuration */
   saveModelsConfig(config: ModelsConfig): Promise<void>;
-  /** 添加或更新供应商 */
+  /** Add or update provider */
   upsertProvider(name: string, provider: ProviderEntry): Promise<void>;
-  /** 删除供应商 */
+  /** Delete provider */
   deleteProvider(name: string): Promise<void>;
-  /** 为指定供应商添加模型 */
+  /** Add model for specified provider */
   addModel(providerName: string, model: ModelEntry): Promise<void>;
-  /** 删除指定供应商的模型 */
+  /** Delete model for specified provider */
   deleteModel(providerName: string, modelId: string): Promise<void>;
-  /** 更新指定供应商的模型 */
+  /** Update model for specified provider */
   updateModel(providerName: string, modelId: string, model: Partial<ModelEntry>): Promise<void>;
 }

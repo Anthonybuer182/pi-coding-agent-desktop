@@ -50,7 +50,7 @@ const DEFAULT_MODEL: ModelEntry = {
   input: ['text'],
 };
 
-/** 判断模型输入类型：纯文本语言模型 或 多模态视觉模型 */
+/** Determine model input type: text-only language model or multimodal vision model */
 function getModelInputType(model: ModelEntry): 'text' | 'multimodal' {
   const input = model.input ?? [];
   if (input.includes('image')) return 'multimodal';
@@ -63,18 +63,18 @@ export function ProviderSettings() {
   const [error, setError] = useState<string | null>(null);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
 
-  // 删除确认
+  // Delete confirmation
   const [deleteProvider, setDeleteProvider] = useState<string | null>(null);
   const [deleteModel, setDeleteModel] = useState<{ provider: string; modelId: string } | null>(null);
 
-  // 添加/编辑供应商对话框
+  // Add/Edit provider dialog
   const [providerDialog, setProviderDialog] = useState<{
     open: boolean;
     name: string;
     data: ProviderEntry;
   }>({ open: false, name: '', data: { ...DEFAULT_PROVIDER } });
 
-  // 添加/编辑模型对话框
+  // Add/Edit model dialog
   const [modelDialog, setModelDialog] = useState<{
     open: boolean;
     providerName: string;
@@ -99,7 +99,7 @@ export function ProviderSettings() {
     });
   }, []);
 
-  // --- 供应商操作 ---
+  // --- Provider operations ---
 
   const handleAddProvider = useCallback(() => {
     setProviderDialog({ open: true, name: '', data: { ...DEFAULT_PROVIDER } });
@@ -120,7 +120,7 @@ export function ProviderSettings() {
       setError(null);
       const { name, data } = providerDialog;
       if (!name.trim() || !data.baseUrl.trim() || !data.apiKey.trim()) {
-        setError('请填写所有必填字段（名称、Base URL、API Key）');
+        setError('Please fill in all required fields (Name, Base URL, API Key)');
         return;
       }
       await sdk.config.upsertProvider(name.trim(), data);
@@ -128,7 +128,7 @@ export function ProviderSettings() {
       queryClient.invalidateQueries({ queryKey: ['modelsConfig'] });
       queryClient.invalidateQueries({ queryKey: ['models'] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : '保存失败');
+      setError(e instanceof Error ? e.message : 'Save failed');
     }
   }, [providerDialog, sdk, queryClient]);
 
@@ -140,11 +140,11 @@ export function ProviderSettings() {
       queryClient.invalidateQueries({ queryKey: ['modelsConfig'] });
       queryClient.invalidateQueries({ queryKey: ['models'] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : '删除失败');
+      setError(e instanceof Error ? e.message : 'Delete failed');
     }
   }, [deleteProvider, sdk, queryClient]);
 
-  // --- 模型操作 ---
+  // --- Model operations ---
 
   const handleAddModel = useCallback((providerName: string) => {
     setModelDialog({
@@ -171,7 +171,7 @@ export function ProviderSettings() {
       setError(null);
       const { providerName, editMode, originalId, data } = modelDialog;
       if (!data.id.trim() || !data.name.trim()) {
-        setError('请填写模型 ID 和名称');
+        setError('Please fill in Model ID and Name');
         return;
       }
       if (editMode) {
@@ -183,7 +183,7 @@ export function ProviderSettings() {
       queryClient.invalidateQueries({ queryKey: ['modelsConfig'] });
       queryClient.invalidateQueries({ queryKey: ['models'] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : '保存失败');
+      setError(e instanceof Error ? e.message : 'Save failed');
     }
   }, [modelDialog, sdk, queryClient]);
 
@@ -195,7 +195,7 @@ export function ProviderSettings() {
       queryClient.invalidateQueries({ queryKey: ['modelsConfig'] });
       queryClient.invalidateQueries({ queryKey: ['models'] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : '删除失败');
+      setError(e instanceof Error ? e.message : 'Delete failed');
     }
   }, [deleteModel, sdk, queryClient]);
 
@@ -214,21 +214,21 @@ export function ProviderSettings() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* 顶部操作栏 */}
+      {/* Top action bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div>
-          <h3 className="text-sm font-semibold">模型供应商配置</h3>
+          <h3 className="text-sm font-semibold">Model Provider Configuration</h3>
           <p className="text-xs text-muted-foreground">
-            管理 ~/.pi/agent/models.json 中的供应商和模型
+            Manage providers and models in ~/.pi/agent/models.json
           </p>
         </div>
         <Button size="sm" onClick={handleAddProvider}>
           <Plus className="h-4 w-4 mr-1" />
-          添加供应商
+          Add Provider
         </Button>
       </div>
 
-      {/* 错误提示 */}
+      {/* Error message */}
       {error && (
         <div className="mx-4 mt-2 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
@@ -239,13 +239,13 @@ export function ProviderSettings() {
         </div>
       )}
 
-      {/* 供应商列表 */}
+      {/* Provider list */}
       <ScrollArea className="flex-1 px-4 py-3">
         <div className="space-y-4">
           {Object.keys(providers).length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <p className="text-sm">暂无供应商配置</p>
-              <p className="text-xs mt-1">点击"添加供应商"创建第一个供应商</p>
+              <p className="text-sm">No provider configuration</p>
+              <p className="text-xs mt-1">Click "Add Provider" to create your first provider</p>
             </div>
           )}
           {Object.entries(providers).map(([name, provider]) => (
@@ -287,14 +287,14 @@ export function ProviderSettings() {
                 <Separator className="mb-2" />
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-medium text-muted-foreground">
-                    模型 ({provider.models.length})
+                    Models ({provider.models.length})
                   </span>
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAddModel(name)}>
-                    <Plus className="h-3 w-3 mr-1" />添加模型
+                    <Plus className="h-3 w-3 mr-1" />Add Model
                   </Button>
                 </div>
                 {provider.models.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-2">暂无模型</p>
+                  <p className="text-xs text-muted-foreground py-2">No models</p>
                 ) : (
                   <div className="space-y-1">
                     {provider.models.map((model) => {
@@ -307,12 +307,12 @@ export function ProviderSettings() {
                           {inputType === 'multimodal' ? (
                             <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">
                               <EyeIcon className="h-2.5 w-2.5 mr-0.5" />
-                              视觉
+                              Vision
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-muted-foreground">
                               <FileText className="h-2.5 w-2.5 mr-0.5" />
-                              文本
+                              Text
                             </Badge>
                           )}
                         </div>
@@ -335,22 +335,22 @@ export function ProviderSettings() {
         </div>
       </ScrollArea>
 
-      {/* 供应商对话框 */}
+      {/* Provider dialog */}
       <Dialog open={providerDialog.open} onOpenChange={(open) => !open && setProviderDialog({ open: false, name: '', data: { ...DEFAULT_PROVIDER } })}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{providerDialog.name ? '编辑供应商' : '添加供应商'}</DialogTitle>
+            <DialogTitle>{providerDialog.name ? 'Edit Provider' : 'Add Provider'}</DialogTitle>
             <DialogDescription>
-              {providerDialog.name ? `修改 ${providerDialog.name} 的配置` : '添加一个新的模型供应商'}
+              {providerDialog.name ? `Modify ${providerDialog.name} configuration` : 'Add a new model provider'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             {!providerDialog.name && (
               <div>
-                <Label htmlFor="providerName">名称 *</Label>
+                <Label htmlFor="providerName">Name *</Label>
                 <Input
                   id="providerName"
-                  placeholder="例如: minimax, openai, dashscope"
+                  placeholder="e.g. minimax, openai, dashscope"
                   value={providerDialog.name ? undefined : ''}
                   onChange={(e) => setProviderDialog((d) => ({ ...d, name: e.target.value }))}
                 />
@@ -366,7 +366,7 @@ export function ProviderSettings() {
               />
             </div>
             <div>
-              <Label htmlFor="providerApi">API 类型 *</Label>
+              <Label htmlFor="providerApi">API Type *</Label>
               <Input
                 id="providerApi"
                 placeholder="openai-completions"
@@ -387,25 +387,25 @@ export function ProviderSettings() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProviderDialog({ open: false, name: '', data: { ...DEFAULT_PROVIDER } })}>
-              取消
+              Cancel
             </Button>
-            <Button onClick={handleSaveProvider}>保存</Button>
+            <Button onClick={handleSaveProvider}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 模型对话框 */}
+      {/* Model dialog */}
       <Dialog open={modelDialog.open} onOpenChange={(open) => !open && setModelDialog({ open: false, providerName: '', editMode: false, originalId: '', data: { ...DEFAULT_MODEL } })}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{modelDialog.editMode ? '编辑模型' : '添加模型'}</DialogTitle>
+            <DialogTitle>{modelDialog.editMode ? 'Edit Model' : 'Add Model'}</DialogTitle>
             <DialogDescription>
-              供应商: {modelDialog.providerName}
+              Provider: {modelDialog.providerName}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <Label htmlFor="modelId">模型 ID *</Label>
+              <Label htmlFor="modelId">Model ID *</Label>
               <Input
                 id="modelId"
                 placeholder="MiniMax-M2.7-highspeed"
@@ -415,7 +415,7 @@ export function ProviderSettings() {
               />
             </div>
             <div>
-              <Label htmlFor="modelName">模型名称 *</Label>
+              <Label htmlFor="modelName">Model Name *</Label>
               <Input
                 id="modelName"
                 placeholder="MiniMax-M2.7-highspeed"
@@ -424,7 +424,7 @@ export function ProviderSettings() {
               />
             </div>
             <div>
-              <Label htmlFor="modelInput">模型类型</Label>
+              <Label htmlFor="modelInput">Model Type</Label>
               <Select
                 value={getModelInputType(modelDialog.data) === 'multimodal' ? 'multimodal' : 'text'}
                 onValueChange={(value: string) =>
@@ -441,62 +441,62 @@ export function ProviderSettings() {
                   <SelectItem value="text">
                     <div className="flex items-center gap-2">
                       <FileText className="h-3.5 w-3.5" />
-                      <span>纯文本语言模型</span>
+                      <span>Text-only Language Model</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="multimodal">
                     <div className="flex items-center gap-2">
                       <EyeIcon className="h-3.5 w-3.5" />
-                      <span>多模态视觉模型</span>
+                      <span>Multimodal Vision Model</span>
                     </div>
                   </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-[10px] text-muted-foreground mt-1">
-                视觉模型可接收图像输入，语言模型仅接收文本
+                Vision models can receive image input; language models receive text only
               </p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModelDialog({ open: false, providerName: '', editMode: false, originalId: '', data: { ...DEFAULT_MODEL } })}>
-              取消
+              Cancel
             </Button>
-            <Button onClick={handleSaveModel}>保存</Button>
+            <Button onClick={handleSaveModel}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* 删除供应商确认 */}
+      {/* Delete provider confirmation */}
       <AlertDialog open={!!deleteProvider} onOpenChange={(open: boolean) => !open && setDeleteProvider(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认删除供应商</AlertDialogTitle>
+            <AlertDialogTitle>Confirm Delete Provider</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要删除供应商 "{deleteProvider}" 吗？该供应商下的所有模型配置将被一同删除。
+              Are you sure you want to delete provider "{deleteProvider}"? All model configurations under this provider will also be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDeleteProvider} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              删除
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 删除模型确认 */}
+      {/* Delete model confirmation */}
       <AlertDialog open={!!deleteModel} onOpenChange={(open: boolean) => !open && setDeleteModel(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认删除模型</AlertDialogTitle>
+            <AlertDialogTitle>Confirm Delete Model</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要删除模型 "{deleteModel?.modelId}" 吗？
+              Are you sure you want to delete model "{deleteModel?.modelId}"?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDeleteModel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              删除
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

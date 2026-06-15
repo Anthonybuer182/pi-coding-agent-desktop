@@ -46,20 +46,20 @@ export function FileTreeNode({ entry, workspaceId, depth, onFileClick }: FileTre
 
   const isDirectory = entry.type === 'directory';
 
-  // 当前文件是否被选中
+  // Whether the current file is selected
   const isSelected = entry.type === 'file' && activePreviewFilePath === entry.path;
 
-  // 当前目录是否是被选中文件的祖先
+  // Whether the current directory is an ancestor of the selected file
   const shouldAutoExpand = entry.type === 'directory'
     && !!activePreviewFilePath
     && activePreviewFilePath.startsWith(entry.path + '/');
 
-  // 自动展开祖先目录
+  // Auto-expand ancestor directory
   useEffect(() => {
     if (shouldAutoExpand) setExpanded(true);
   }, [shouldAutoExpand]);
 
-  // 文件选中后滚动到可视区域
+  // Scroll file into view after selection
   useEffect(() => {
     if (isSelected && ref.current) {
       const timer = setTimeout(() => {

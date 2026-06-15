@@ -137,7 +137,7 @@ export function ThreeColumnLayout({
               size="icon"
               className="h-8 w-8 shrink-0 mr-1 text-muted-foreground hover:text-foreground"
               onClick={onToggleRightPanel}
-              title={rightPanelOpen ? '折叠右侧面板' : '展开右侧面板'}
+              title={rightPanelOpen ? 'Collapse right panel' : 'Expand right panel'}
             >
               {rightPanelOpen ? (
                 <PanelRightClose className="h-4 w-4" />

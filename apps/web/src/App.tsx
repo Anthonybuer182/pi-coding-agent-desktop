@@ -106,7 +106,7 @@ function AppContent() {
                   onClick={() => setRightPanelTab('settings')}
                 >
                   <SettingsIcon />
-                  设置
+                  Settings
                 </Button>
               </div>
             </LeftSidebar>

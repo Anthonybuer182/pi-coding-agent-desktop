@@ -210,9 +210,9 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
     async addModel(providerName: string, model: ModelEntry): Promise<void> {
       const current = readModelsConfig();
       const provider = current.providers[providerName];
-      if (!provider) throw new Error(`供应商 "${providerName}" 不存在`);
+      if (!provider) throw new Error(`Provider "${providerName}" does not exist`);
       if (provider.models.find((m) => m.id === model.id)) {
-        throw new Error(`模型 "${model.id}" 已存在`);
+        throw new Error(`Model "${model.id}" already exists`);
       }
       provider.models.push(model);
       writeModelsConfig(current);
@@ -222,7 +222,7 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
     async deleteModel(providerName: string, modelId: string): Promise<void> {
       const current = readModelsConfig();
       const provider = current.providers[providerName];
-      if (!provider) throw new Error(`供应商 "${providerName}" 不存在`);
+      if (!provider) throw new Error(`Provider "${providerName}" does not exist`);
       provider.models = provider.models.filter((m) => m.id !== modelId);
       writeModelsConfig(current);
       configuredProviders = refreshConfiguredProviders(modelRegistry);
@@ -231,9 +231,9 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
     async updateModel(providerName: string, modelId: string, model: Partial<ModelEntry>): Promise<void> {
       const current = readModelsConfig();
       const provider = current.providers[providerName];
-      if (!provider) throw new Error(`供应商 "${providerName}" 不存在`);
+      if (!provider) throw new Error(`Provider "${providerName}" does not exist`);
       const idx = provider.models.findIndex((m) => m.id === modelId);
-      if (idx === -1) throw new Error(`模型 "${modelId}" 不存在`);
+      if (idx === -1) throw new Error(`Model "${modelId}" does not exist`);
       provider.models[idx] = { ...provider.models[idx], ...model, id: modelId };
       writeModelsConfig(current);
       configuredProviders = refreshConfiguredProviders(modelRegistry);

@@ -13,13 +13,13 @@ export interface Config {
   enableStreaming: boolean;
 }
 
-// models.json 配置类型
+// models.json configuration types
 
 export interface ModelEntry {
   id: string;
   name: string;
   input?: string[];
-  /** 自定义模型专用的额外配置 */
+  /** Extra configuration specific to custom models */
   api?: string;
   baseUrl?: string;
   contextWindow?: number;
