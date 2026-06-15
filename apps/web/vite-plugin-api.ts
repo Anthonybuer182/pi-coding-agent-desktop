@@ -199,7 +199,6 @@ let workspaceService: any;
 let sessionService: any;
 let chatService: any;
 let fileService: any;
-let diffService: any;
 let configService: any;
 
 async function loadAdapters(server: ViteDevServer) {
@@ -211,7 +210,6 @@ async function loadAdapters(server: ViteDevServer) {
   sessionService = adaptersModule.createRealSessionService();
   chatService = adaptersModule.createRealChatService(cwd);
   fileService = adaptersModule.createRealFileService();
-  diffService = adaptersModule.createRealDiffService();
   configService = adaptersModule.createRealConfigService(cwd);
 }
 
@@ -264,15 +262,6 @@ async function handleRequest(server: ViteDevServer, method: string, params: any)
         case 'list': return fileService.list(params.workspaceId, params.directory ?? params.dirPath);
         case 'write': return fileService.write(params.workspaceId, params.path, params.content);
         case 'readOffice': return fileService.readOffice(params.workspaceId, params.path);
-      }
-      break;
-
-    case 'diff':
-      switch (action) {
-        case 'list': return diffService.list(params.sessionId);
-        case 'get': return diffService.get(params.id);
-        case 'accept': return diffService.accept(params.id);
-        case 'reject': return diffService.reject(params.id);
       }
       break;
 

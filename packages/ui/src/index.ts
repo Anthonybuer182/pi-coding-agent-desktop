@@ -40,7 +40,6 @@ export { SessionList, SessionItem, SessionCreateButton, SessionGroupHeader } fro
 export { ChatTimeline, MessageBubble, ThinkingBlock, ToolCallDisplay, EmptyChat, StreamingIndicator } from './components/chat';
 export { Composer, ComposerInput, SendButton, SlashCommandMenu, MentionMenu, AttachmentPreviewBar, FileUploadButton } from './components/composer';
 export { DocumentPreview, CodeEditor, MarkdownPreview, HTMLPreview, DocxPreview, XlsxPreview, PptxPreview, PDFPreview, EmptyPreview } from './components/document';
-export { DiffReview, DiffLine, DiffHunk, DiffHeader, AcceptRejectControls, EmptyDiff } from './components/diff';
 export { ModelSelector, ThinkLevelSelector, CompactToggle, SkillSelector } from './components/model';
 export { ProviderSettings } from './components/settings';
 export { UsageBar } from './components/usage';

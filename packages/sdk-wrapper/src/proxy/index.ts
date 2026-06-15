@@ -5,7 +5,6 @@ import { createProxyWorkspaceService } from './workspace.js';
 import { createProxySessionService } from './session.js';
 import { createProxyChatService } from './chat.js';
 import { createProxyFileService } from './file.js';
-import { createProxyDiffService } from './diff.js';
 import { createProxyConfigService } from './config.js';
 import type { SlashCommand } from '@pi/types';
 
@@ -18,7 +17,6 @@ export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   { id: 'sc-compact', name: '/compact', description: 'Compact conversation context', category: 'chat' },
   { id: 'sc-model', name: '/model', description: 'Switch the AI model', category: 'config' },
   { id: 'sc-config', name: '/config', description: 'Show or update config', category: 'config' },
-  { id: 'sc-diff', name: '/diff', description: 'Show diff for current session', category: 'chat' },
   { id: 'sc-bash', name: '/bash', description: 'Execute a bash command', category: 'tool', args: [{ name: 'command', description: 'Bash command to execute', required: true, type: 'string' }] },
   { id: 'sc-file', name: '/file', description: 'Open a file', category: 'file', args: [{ name: 'path', description: 'File path', required: true, type: 'string' }] },
 ];
@@ -40,7 +38,6 @@ export function createProxySDKClient(options: ProxySDKClientOptions): PiSDKClien
     session: createProxySessionService(transport),
     chat: createProxyChatService(transport),
     file: createProxyFileService(transport),
-    diff: createProxyDiffService(transport),
     config: createProxyConfigService(transport),
   });
 }

@@ -6,6 +6,5 @@ export * from './services/workspace.js';
 export * from './services/session.js';
 export * from './services/chat.js';
 export * from './services/file.js';
-export * from './services/diff.js';
 export * from './services/config.js';
 export * from './proxy/index.js';

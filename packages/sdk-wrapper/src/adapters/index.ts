@@ -5,7 +5,6 @@ import { createRealWorkspaceService } from './workspace.js';
 import { createRealSessionService } from './session.js';
 import { createRealChatService } from './chat.js';
 import { createRealFileService } from './file.js';
-import { createRealDiffService } from './diff.js';
 import { createRealConfigService } from './config.js';
 import { DEFAULT_SLASH_COMMANDS } from './skills.js';
 
@@ -14,7 +13,6 @@ export {
   createRealSessionService,
   createRealChatService,
   createRealFileService,
-  createRealDiffService,
   createRealConfigService,
   DEFAULT_SLASH_COMMANDS,
 };
@@ -41,7 +39,6 @@ export function createRealSDKClient(options: RealSDKClientOptions): PiSDKClient 
     session: createRealSessionService(),
     chat: createRealChatService(cwd),
     file: createRealFileService(),
-    diff: createRealDiffService(),
     config: createRealConfigService(cwd, agentDir),
   });
 }

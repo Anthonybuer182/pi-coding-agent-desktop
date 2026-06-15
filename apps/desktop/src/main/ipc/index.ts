@@ -3,15 +3,13 @@ import {
   createRealWorkspaceService,
   createRealSessionService,
   createRealFileService,
-  createRealDiffService,
   createRealConfigService,
 } from '@pi/sdk-wrapper/adapters';
-import type { WorkspaceService, SessionService, FileService, DiffService, ConfigService, SendMessageParams } from '@pi/sdk-wrapper';
+import type { WorkspaceService, SessionService, FileService, ConfigService, SendMessageParams } from '@pi/sdk-wrapper';
 
 const workspaceService: WorkspaceService = createRealWorkspaceService();
 const sessionService: SessionService = createRealSessionService();
 const fileService: FileService = createRealFileService();
-const diffService: DiffService = createRealDiffService();
 const configService: ConfigService = createRealConfigService(process.cwd());
 
 interface SdkRequest {
@@ -49,7 +47,6 @@ async function routeRequest(method: string, params: unknown): Promise<unknown> {
     case 'session': return handleSession(action, params);
     case 'chat': return handleChat(action, params);
     case 'file': return handleFile(action, params);
-    case 'diff': return handleDiff(action, params);
     case 'config': return handleConfig(action, params);
     case 'system': return handleSystem(action);
     default:
@@ -124,17 +121,6 @@ async function handleFile(action: string, params: unknown): Promise<unknown> {
     case 'write': return fileService.write(p.workspaceId as string, p.path as string, p.content as string);
     case 'readOffice': return fileService.readOffice(p.workspaceId as string, p.path as string);
     default: throw new Error(`Unknown file action: ${action}`);
-  }
-}
-
-async function handleDiff(action: string, params: unknown): Promise<unknown> {
-  const p = params as Record<string, unknown>;
-  switch (action) {
-    case 'list': return diffService.list(p.sessionId as string);
-    case 'get': return diffService.get(p.id as string);
-    case 'accept': return diffService.accept(p.id as string);
-    case 'reject': return diffService.reject(p.id as string);
-    default: throw new Error(`Unknown diff action: ${action}`);
   }
 }
 

@@ -46,7 +46,6 @@ export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   { id: 'sc-compact', name: '/compact', description: 'Compact conversation context', category: 'chat' },
   { id: 'sc-model', name: '/model', description: 'Switch the AI model', category: 'config' },
   { id: 'sc-config', name: '/config', description: 'Show or update config', category: 'config' },
-  { id: 'sc-diff', name: '/diff', description: 'Show diff for current session', category: 'chat' },
   { id: 'sc-bash', name: '/bash', description: 'Execute a bash command', category: 'tool', args: [{ name: 'command', description: 'Bash command to execute', required: true, type: 'string' }] },
   { id: 'sc-file', name: '/file', description: 'Open a file', category: 'file', args: [{ name: 'path', description: 'File path', required: true, type: 'string' }] },
 ];
