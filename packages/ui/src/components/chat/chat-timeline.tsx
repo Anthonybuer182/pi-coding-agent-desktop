@@ -124,7 +124,7 @@ export function ChatTimeline() {
     queryKey: ['session', activeSessionId],
     queryFn: () => sdk.session.get(activeSessionId!),
     enabled: !!activeSessionId,
-    staleTime: 0,
+    staleTime: 30_000,
   });
 
   const storedMessages = session?.messages ?? [];

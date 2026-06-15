@@ -56,6 +56,7 @@ interface ComposerState {
   addStreamingBlock: (block: ContentBlock) => void;
   updateStreamingBlock: (id: string, updates: Partial<ContentBlock>) => void;
   clearStreamingBlocks: () => void;
+  setStreamingBlocks: (blocks: ContentBlock[]) => void;
   setStreamingUsage: (usage: TokenUsage | null) => void;
   setContextUsage: (ctx: ContextUsageInfo | null) => void;
   setSessionStats: (stats: SessionStatsInfo | null) => void;
@@ -145,6 +146,7 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
       ),
     })),
   clearStreamingBlocks: () => set({ streamingBlocks: [] }),
+  setStreamingBlocks: (streamingBlocks) => set({ streamingBlocks }),
   setStreamingUsage: (streamingUsage) => set({ streamingUsage }),
   setContextUsage: (contextUsage) => set({ contextUsage }),
   setStreamError: (streamError) => set({ streamError }),

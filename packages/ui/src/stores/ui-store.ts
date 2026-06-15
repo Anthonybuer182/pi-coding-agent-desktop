@@ -11,7 +11,7 @@ interface UIState {
   sidebarOpen: boolean;
   rightPanelOpen: boolean;
   rightPanelWidth: number;
-  rightPanelActiveTab: 'preview' | 'diff' | 'settings' | 'session-tree';
+  rightPanelActiveTab: 'preview' | 'diff' | 'settings';
   compactMode: boolean;
   selectedSkills: string[];
   connectionStatus: ConnectionStatus;
@@ -54,7 +54,7 @@ export const useUIStore = create<UIState>()(
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
       setRightPanelWidth: (width) => set({ rightPanelWidth: width }),
-      setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab as 'preview' | 'diff' | 'settings' | 'session-tree' }),
+      setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab as 'preview' | 'diff' | 'settings' }),
       setCompactMode: (compact) => set({ compactMode: compact }),
       toggleSkill: (skillId) =>
         set((s) => ({

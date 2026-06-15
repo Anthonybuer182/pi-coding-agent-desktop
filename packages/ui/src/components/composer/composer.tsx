@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, useRef, useEffect, DragEvent } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Square, Upload, CornerDownRight } from 'lucide-react';
 import { cn, isPreviewableInRightPanel } from '@/lib/utils';
+import { streamReducer, initialStreamingState } from '@/lib/stream-reducer';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useSDK } from '@/hooks/use-sdk';
@@ -22,14 +23,6 @@ import { CompactToggle } from '../model/compact-toggle';
 import { DEFAULT_SLASH_COMMANDS } from '@pi/sdk-wrapper';
 import type { ContentBlock, Config, Skill } from '@pi/types';
 import type { Attachment } from '@pi/types';
-
-/** Like Array.findLastIndex but works on all ContentBlock arrays */
-function findLastIndex<T>(arr: T[], predicate: (item: T) => boolean): number {
-  for (let i = arr.length - 1; i >= 0; i--) {
-    if (predicate(arr[i])) return i;
-  }
-  return -1;
-}
 
 const DEFAULT_SKILLS: Skill[] = [
   { id: 'skill-filesystem', name: 'filesystem', description: 'Access and manage local files', category: 'filesystem', enabled: true },
@@ -66,9 +59,8 @@ export function Composer() {
     updateAttachmentData,
     removeAttachment,
     clearAttachments,
-    addStreamingBlock,
-    updateStreamingBlock,
     clearStreamingBlocks,
+    setStreamingBlocks,
     setStreamingUsage,
     setContextUsage,
     setSessionStats,
@@ -442,6 +434,9 @@ export function Composer() {
         .filter((a) => a.type === 'image' && a.data)
         .map((a) => ({ name: a.name, mimeType: a.mimeType, data: a.data! }));
 
+      // Streaming state managed by reducer for consistent block ordering/dedup
+      let streamState = initialStreamingState();
+
       await sdk.chat.sendMessageStream(
         {
           sessionId: activeSessionId,
@@ -451,55 +446,20 @@ export function Composer() {
           attachments: imageAttachments.length > 0 ? imageAttachments : undefined,
         },
         (chunk) => {
-          if (chunk.type === 'block' && chunk.block) {
+          if (chunk.type === 'message_start') {
+            streamState = streamReducer(streamState, { type: 'message_start' });
+            setStreamingBlocks(streamState.blocks);
+          } else if (chunk.type === 'block' && chunk.block) {
+            streamState = streamReducer(streamState, { type: 'block', block: chunk.block as ContentBlock });
+            setStreamingBlocks(streamState.blocks);
+            // Auto-switch right panel to preview files as they are created
             const block = chunk.block as ContentBlock;
-            // Text blocks from SDK carry the full accumulated text with a new ID
-            // each time. Merge into the last text block (which may not be the
-            // last overall block if thinking/tool_call blocks arrived since).
-            if (block.type === 'text') {
-              const blocks = useComposerStore.getState().streamingBlocks;
-              const lastTextIdx = findLastIndex(blocks, (b) => b.type === 'text');
-              if (lastTextIdx >= 0) {
-                updateStreamingBlock(blocks[lastTextIdx].id, { content: block.content });
-              } else {
-                addStreamingBlock(block);
-              }
-            } else if (block.type === 'tool_call' || block.type === 'tool_result') {
-              // Deduplicate by type+toolCallId — SDK re-emits the accumulated
-              // content array on each message_update, so the same tool_call
-              // or tool_result can arrive with a new block ID. We MUST match
-              // the type so tool_result doesn't overwrite tool_call and vice versa.
-              const blocks = useComposerStore.getState().streamingBlocks;
-              const existingIdx = blocks.findIndex(
-                (b) => b.type === block.type &&
-                       (b as ContentBlock).toolCallId === block.toolCallId,
-              );
-              if (existingIdx >= 0 && block.toolCallId) {
-                updateStreamingBlock(blocks[existingIdx].id, block);
-              } else {
-                addStreamingBlock(block);
-              }
-            } else {
-              addStreamingBlock(block);
-              // Auto-switch right panel to preview files as they are created
-              if (block.type === 'file' && block.workspacePath && isPreviewableInRightPanel(block.workspacePath)) {
-                setActivePreviewFile(block.workspacePath);
-              }
+            if (block.type === 'file' && block.workspacePath && isPreviewableInRightPanel(block.workspacePath)) {
+              setActivePreviewFile(block.workspacePath);
             }
           } else if (chunk.type === 'text' && chunk.content) {
-            const blocks = useComposerStore.getState().streamingBlocks;
-            const lastTextIdx = findLastIndex(blocks, (b) => b.type === 'text');
-            if (lastTextIdx >= 0) {
-              updateStreamingBlock(blocks[lastTextIdx].id, {
-                content: blocks[lastTextIdx].content + chunk.content,
-              });
-            } else {
-              addStreamingBlock({
-                id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                type: 'text',
-                content: chunk.content,
-              });
-            }
+            streamState = streamReducer(streamState, { type: 'text_delta', content: chunk.content });
+            setStreamingBlocks(streamState.blocks);
           } else if (chunk.type === 'usage' && chunk.usage) {
             setStreamingUsage(chunk.usage);
           } else if (chunk.type === 'context' && chunk.contextUsage) {
@@ -519,18 +479,16 @@ export function Composer() {
       );
     },
     onSuccess: () => {
+      const state = useComposerStore.getState();
+
       // Clear editing state if in edit mode
-      if (useComposerStore.getState().editingEntryId) {
+      if (state.editingEntryId) {
         clearEditingMessage();
       }
-
-      // Session-tree still needs invalidation to reflect the new branch structure
-      queryClient.invalidateQueries({ queryKey: ['session-tree', activeSessionId] });
 
       // Promote the streaming data into the query cache as a single assistant message.
       // Each stream produces exactly one assistant response, since follow-ups/steers
       // are now sent via separate sendMutation.mutate() calls.
-      const state = useComposerStore.getState();
       const blocks = state.streamingBlocks.map((b) => {
         if (b.type === 'tool_call' && b.toolCallId) {
           const ms = state.toolTimings.get(b.toolCallId);

@@ -272,6 +272,7 @@ export function createRealChatService(cwd: string): ChatService {
       let messageStartTime = 0;
       let messageEndTime = 0;
       let outputText = '';
+      let thinkingBlockId: string | null = null; // stable ID per message turn
       const toolStartTimes = new Map<string, number>();
       const toolArgs = new Map<string, Record<string, unknown>>();
 
@@ -281,12 +282,12 @@ export function createRealChatService(cwd: string): ChatService {
         switch (event.type) {
           case 'message_start': {
             messageStartTime = Date.now();
+            thinkingBlockId = null; // reset for new turn
             // Signal frontend that a new message group is starting,
             // so it creates fresh blocks instead of overwriting prior group.
             safeChunk({ type: 'message_start' });
-            // Fall through to process content like message_update
+            break;
           }
-          // eslint-disable-next-line no-fallthrough
           case 'message_update': {
             const msg = event.message;
             if (msg && msg.content) {
@@ -320,10 +321,13 @@ export function createRealChatService(cwd: string): ChatService {
                       },
                     });
                   } else if (block.type === 'thinking') {
+                    if (!thinkingBlockId) {
+                      thinkingBlockId = `b-think-${Date.now()}`;
+                    }
                     safeChunk({
                       type: 'block',
                       block: {
-                        id: `b-think-${Date.now()}`,
+                        id: thinkingBlockId,
                         type: 'thinking',
                         content: block.thinking || '',
                         thinking: block.thinking,
