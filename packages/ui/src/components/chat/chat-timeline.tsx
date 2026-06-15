@@ -89,7 +89,8 @@ function makeStreamingMessage(
     role: 'assistant',
     status: 'streaming',
     content: blocks.filter((b) => b.type === 'text').map((b) => b.content).join(''),
-    blocks,
+    // Exclude file blocks during streaming; they appear after completion.
+    blocks: blocks.filter((b) => b.type !== 'file'),
     usage,
     createdAt,
     updatedAt: new Date().toISOString(),

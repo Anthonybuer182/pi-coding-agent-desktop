@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, File, FileCode, FileText, FileImage, Folder, FolderOpen, Loader2 } from 'lucide-react';
 import { useSDK } from '@/hooks/use-sdk';
+import { useUIStore } from '@/stores/ui-store';
 import { cn } from '@/lib/utils';
 import type { FileEntry } from '@pi/sdk-wrapper';
 
@@ -32,6 +33,8 @@ function getFileIcon(name: string, isDirectory: boolean) {
 
 export function FileTreeNode({ entry, workspaceId, depth, onFileClick }: FileTreeNodeProps) {
   const sdk = useSDK();
+  const ref = useRef<HTMLDivElement>(null);
+  const activePreviewFilePath = useUIStore((s) => s.activePreviewFilePath);
   const [expanded, setExpanded] = useState(false);
 
   const { data: children, isLoading } = useQuery({
@@ -42,6 +45,29 @@ export function FileTreeNode({ entry, workspaceId, depth, onFileClick }: FileTre
   });
 
   const isDirectory = entry.type === 'directory';
+
+  // 当前文件是否被选中
+  const isSelected = entry.type === 'file' && activePreviewFilePath === entry.path;
+
+  // 当前目录是否是被选中文件的祖先
+  const shouldAutoExpand = entry.type === 'directory'
+    && !!activePreviewFilePath
+    && activePreviewFilePath.startsWith(entry.path + '/');
+
+  // 自动展开祖先目录
+  useEffect(() => {
+    if (shouldAutoExpand) setExpanded(true);
+  }, [shouldAutoExpand]);
+
+  // 文件选中后滚动到可视区域
+  useEffect(() => {
+    if (isSelected && ref.current) {
+      const timer = setTimeout(() => {
+        ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isSelected]);
 
   const handleClick = () => {
     if (isDirectory) {
@@ -54,14 +80,17 @@ export function FileTreeNode({ entry, workspaceId, depth, onFileClick }: FileTre
   return (
     <div>
       <div
+        ref={ref}
         role="button"
         tabIndex={0}
         onClick={handleClick}
         onKeyDown={(e) => e.key === 'Enter' && handleClick()}
         aria-expanded={isDirectory ? expanded : undefined}
+        aria-selected={isSelected || undefined}
         aria-label={isDirectory ? `Toggle directory: ${entry.name}` : `Preview file: ${entry.name}`}
         className={cn(
           'group flex items-center gap-1 rounded-sm px-2 py-1 text-sm cursor-pointer transition-colors hover:bg-accent/50',
+          isSelected && 'bg-accent',
         )}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         title={entry.name}

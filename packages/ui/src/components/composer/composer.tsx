@@ -452,11 +452,6 @@ export function Composer() {
           } else if (chunk.type === 'block' && chunk.block) {
             streamState = streamReducer(streamState, { type: 'block', block: chunk.block as ContentBlock });
             setStreamingBlocks(streamState.blocks);
-            // Auto-switch right panel to preview files as they are created
-            const block = chunk.block as ContentBlock;
-            if (block.type === 'file' && block.workspacePath && isPreviewableInRightPanel(block.workspacePath)) {
-              setActivePreviewFile(block.workspacePath);
-            }
           } else if (chunk.type === 'text' && chunk.content) {
             streamState = streamReducer(streamState, { type: 'text_delta', content: chunk.content });
             setStreamingBlocks(streamState.blocks);
@@ -489,6 +484,8 @@ export function Composer() {
       // Promote the streaming data into the query cache as a single assistant message.
       // Each stream produces exactly one assistant response, since follow-ups/steers
       // are now sent via separate sendMutation.mutate() calls.
+      // Note: file blocks are rendered at the end by renderBlocks() in message-bubble,
+      // so no manual reordering is needed here.
       const blocks = state.streamingBlocks.map((b) => {
         if (b.type === 'tool_call' && b.toolCallId) {
           const ms = state.toolTimings.get(b.toolCallId);
@@ -527,6 +524,15 @@ export function Composer() {
       clearStreamingBlocks();
       setIsStreaming(false);
       queryClient.invalidateQueries({ queryKey: ['files'] });
+
+      // Auto-preview the last generated file in the right panel
+      const fileBlocks = blocks.filter((b) => b.type === 'file');
+      if (fileBlocks.length > 0) {
+        const lastFile = fileBlocks[fileBlocks.length - 1];
+        if (lastFile.workspacePath && isPreviewableInRightPanel(lastFile.workspacePath)) {
+          setActivePreviewFile(lastFile.workspacePath);
+        }
+      }
 
       // Drain queue: send next queued item as a new message
       const nextText = useComposerStore.getState().dequeueNext();

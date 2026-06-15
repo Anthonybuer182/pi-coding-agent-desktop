@@ -4,7 +4,7 @@ import { useSDK } from '@/hooks/use-sdk';
 import { useUIStore } from '@/stores/ui-store';
 import { FileTreeNode } from './file-tree-node';
 import { Button } from '@/components/ui/button';
-import { isPreviewableInRightPanel, openWithSystemApp } from '@/lib/utils';
+import { isPreviewableInRightPanel, openWithSystemApp, showInFinder } from '@/lib/utils';
 
 const HIDDEN_DIRS = new Set(['.git', 'node_modules', '.vite', 'dist', '.next', '__pycache__', '.DS_Store']);
 
@@ -27,6 +27,7 @@ export function FileTree() {
     } else {
       openWithSystemApp(path, activeWorkspaceId!);
     }
+    showInFinder(path);
   };
 
   if (!activeWorkspaceId) return null;

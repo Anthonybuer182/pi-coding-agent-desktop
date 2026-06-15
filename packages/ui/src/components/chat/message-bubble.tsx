@@ -37,16 +37,22 @@ function renderBlocks(blocks: ContentBlock[], isStreaming: boolean, toolTimings:
   const resultMap = new Map<string, ToolResultBlock>();
   const elements: React.ReactNode[] = [];
 
+  // Separate file blocks — they always render at the end, regardless of
+  // their position in the data, so the display is consistent between
+  // streaming, cached, and loaded-from-disk views.
+  const nonFileBlocks = blocks.filter((b) => b.type !== 'file');
+  const fileBlocks = blocks.filter((b) => b.type === 'file');
+
   // First pass: collect all tool_results by toolCallId
-  for (const block of blocks) {
+  for (const block of nonFileBlocks) {
     if (block.type === 'tool_result') {
       const resultBlock = block as ToolResultBlock;
       resultMap.set(resultBlock.toolCallId, resultBlock);
     }
   }
 
-  // Second pass: render blocks, pairing tool_calls with results
-  for (const block of blocks) {
+  // Second pass: render non-file blocks, pairing tool_calls with results
+  for (const block of nonFileBlocks) {
     switch (block.type) {
       case 'text':
         elements.push(
@@ -81,14 +87,16 @@ function renderBlocks(blocks: ContentBlock[], isStreaming: boolean, toolTimings:
           <ImageBlockDisplay key={block.id} block={block as ImageBlock} isStreaming={isStreaming} />,
         );
         break;
-      case 'file':
-        elements.push(
-          <FileBlockDisplay key={block.id} block={block as FileBlock} />,
-        );
-        break;
       default:
         break;
     }
+  }
+
+  // Render file blocks at the end for consistent display across all data sources
+  for (const block of fileBlocks) {
+    elements.push(
+      <FileBlockDisplay key={block.id} block={block as FileBlock} />,
+    );
   }
 
   return elements;

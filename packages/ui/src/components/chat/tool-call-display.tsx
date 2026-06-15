@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ToolCallBlock, ToolResultBlock } from '@pi/types';
 import './chat-animations.css';
@@ -45,13 +45,6 @@ export function ToolCallDisplay({ block, result, isStreaming, durationMs }: Tool
       ? rawResult
       : JSON.stringify(rawResult);
   const resultIsEmpty = result ? (resultText.trim() === '' || resultText.trim() === '(empty)') : false;
-
-  // Auto-expand during streaming when args arrive, unless user manually collapsed
-  useEffect(() => {
-    if (isStreaming && block.args && Object.keys(block.args).length > 0 && !userCollapsed) {
-      setExpanded(true);
-    }
-  }, [isStreaming, block.args, userCollapsed]);
 
   const handleToggle = () => {
     if (expanded) {

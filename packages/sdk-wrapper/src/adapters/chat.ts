@@ -445,7 +445,7 @@ export function createRealChatService(cwd: string): ChatService {
                 safeChunk({
                   type: 'block',
                   block: {
-                    id: `b-ter-file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                    id: `b-ter-file-${file.relPath}`,
                     type: 'file',
                     content: path.basename(file.absPath),
                     mimeType: file.mimeType,

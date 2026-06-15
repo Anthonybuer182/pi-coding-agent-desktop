@@ -494,16 +494,22 @@ export function createRealSessionService(): SessionService {
         if (message) messages.push(message);
       }
 
-      // Post-process: add file blocks for files detected in tool results
+      // Post-process: collect file blocks from ALL tool results across all messages,
+      // deduplicate globally, then append them to the LAST message only.
+      // This matches the streaming behaviour where all file blocks appear at the
+      // very end of the assistant response, never interleaved mid-conversation.
       const cwd = header?.cwd || sm.getCwd();
+      const allFileBlocks: ContentBlock[] = [];
+      const seenPaths = new Set<string>();
       for (const message of messages) {
-        const fileBlocks: ContentBlock[] = [];
         for (const block of message.blocks) {
           if (block.type === 'tool_result' && block.result) {
             const files = detectFilesFromResult(block.result, cwd);
             for (const file of files) {
-              fileBlocks.push({
-                id: `b-file-sess-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              if (seenPaths.has(file.absPath)) continue;
+              seenPaths.add(file.absPath);
+              allFileBlocks.push({
+                id: `b-file-sess-${file.absPath}`,
                 type: 'file',
                 content: path.basename(file.absPath),
                 mimeType: file.mimeType,
@@ -514,9 +520,10 @@ export function createRealSessionService(): SessionService {
             }
           }
         }
-        if (fileBlocks.length > 0) {
-          message.blocks.push(...fileBlocks);
-        }
+      }
+      if (allFileBlocks.length > 0 && messages.length > 0) {
+        const lastMsg = messages[messages.length - 1];
+        lastMsg.blocks.push(...allFileBlocks);
       }
       const sessionName = sm.getSessionName();
       const title = (typeof sessionName === 'string' && sessionName ? sessionName : undefined)
