@@ -13,7 +13,11 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "pack:mac": "cd apps/desktop && pnpm pack:mac",
+    "pack:win": "cd apps/desktop && pnpm pack:win",
+    "pack:linux": "cd apps/desktop && pnpm pack:linux",
+    "pack:all": "cd apps/desktop && pnpm pack:all"
   },
   "devDependencies": {
     "prettier": "^3.8.3",

@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell, clipboard, app, BrowserWindow } from 'electron';
+import { ipcMain, dialog, shell, clipboard, app, BrowserWindow, nativeImage } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
@@ -160,7 +160,7 @@ export function registerNativeIpcHandlers(): void {
 
   ipcMain.handle('pi:clipboard:writeImage', (_event, imagePath: string) => {
     const resolved = path.isAbsolute(imagePath) ? imagePath : path.resolve(imagePath);
-    const img = require('electron').nativeImage.createFromPath(resolved);
+    const img = nativeImage.createFromPath(resolved);
     clipboard.writeImage(img);
   });
 

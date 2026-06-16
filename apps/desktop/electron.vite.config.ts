@@ -5,7 +5,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin({
-      exclude: ['@pi/sdk-wrapper', '@earendil-works/pi-coding-agent'],
+      // Only bundle our own workspace code. Externalize all npm packages,
+      // especially @earendil-works/pi-coding-agent which contains native
+      // .node addons and WASM files that cannot be bundled by Vite.
+      exclude: ['@pi/sdk-wrapper'],
     })],
     resolve: {
       alias: {
@@ -16,6 +19,13 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
+        },
+        output: {
+          // Output ESM so dynamic imports work with externalized ESM-only packages
+          // like @earendil-works/pi-coding-agent (which has "type": "module").
+          format: 'es',
+          entryFileNames: '[name].mjs',
+          chunkFileNames: 'chunks/[name]-[hash].mjs',
         },
       },
     },

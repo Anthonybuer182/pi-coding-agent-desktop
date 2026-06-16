@@ -4,21 +4,52 @@ directories:
   buildResources: build
   output: release
 
+# App icon (512x512 PNG). electron-builder auto-converts to .icns (macOS) and .ico (Windows).
+icon: build/icon.png
+
+# Let electron-builder auto-detect production dependencies from package.json.
+# We only need to include the electron-vite output; electron-builder will pull in the
+# necessary node_modules based on the "dependencies" field.
 files:
-  - dist/**/*
-  - node_modules/**/*
+  - out/**/*
+
+# Native .node addons inside @earendil-works/pi-coding-agent must be unpacked
+# from the asar archive so they can be loaded by Node at runtime.
+asarUnpack:
+  - "node_modules/@mariozechner/**/*"
+  - "node_modules/@earendil-works/pi-tui/**/*"
 
 mac:
   category: public.app-category.developer-tools
   target:
     - dmg
     - zip
+  # Code signing: requires Apple Developer account.
+  # Uncomment and set these when you have a signing identity:
+  # hardenedRuntime: true
+  # gatekeeperAssess: false
+  # entitlements: build/entitlements.mac.plist
+  # entitlementsInherit: build/entitlements.mac.plist
 
 win:
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  # Code signing for Windows (requires certificate):
+  # certificateFile: build/cert.pfx
+  # certificatePassword: ${CERT_PASSWORD}
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
 
 linux:
   target:
     - AppImage
     - deb
+  category: Development
+  maintainer: pi@example.com

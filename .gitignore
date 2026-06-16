@@ -28,5 +28,8 @@ pnpm-debug.log*
 # Screenshots
 *.png
 *.jpg
+# Keep build icons
+!apps/desktop/build/icon.png
+!apps/desktop/build/icon.icns
 # Claude
 .claude/
