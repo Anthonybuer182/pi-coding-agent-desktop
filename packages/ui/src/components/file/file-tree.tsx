@@ -18,7 +18,7 @@ export function FileTree() {
     queryKey: ['files', activeWorkspaceId, activeWorkspaceId],
     queryFn: () => sdk.file.list(activeWorkspaceId!),
     enabled: !!activeWorkspaceId,
-    staleTime: 30_000,
+    staleTime: 5_000,
   });
 
   const handleFileClick = (path: string) => {

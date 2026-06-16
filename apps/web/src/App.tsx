@@ -15,7 +15,7 @@ import { CenterPanel } from '@pi/ui';
 import { RightPanel } from '@pi/ui';
 import { RightPanelTabs } from '@pi/ui';
 import { WorkspaceDropdown } from '@pi/ui';
-import { WorkspaceCreateDialog } from '@pi/ui';
+import { WorkspaceCreateButton } from '@pi/ui';
 import { SessionList } from '@pi/ui';
 import { ChatTimeline } from '@pi/ui';
 import { Composer } from '@pi/ui';
@@ -37,7 +37,7 @@ const SettingsIcon = () => (
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      staleTime: 5_000,
       retry: 1,
     },
   },
@@ -78,7 +78,7 @@ function AppContent() {
           topLeftContent={
             <>
               <WorkspaceDropdown />
-              <WorkspaceCreateDialog />
+              <WorkspaceCreateButton />
             </>
           }
           rightPanelHeader={

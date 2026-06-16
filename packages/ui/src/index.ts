@@ -35,7 +35,7 @@ export { useKeyboardShortcut } from './hooks/use-keyboard-shortcut';
 export { useResizeObserver } from './hooks/use-resize-observer';
 
 export { AppShell, ThreeColumnLayout, TopControlPanel, LeftSidebar, CenterPanel, RightPanel, RightPanelTabs } from './components/layout';
-export { WorkspaceDropdown, WorkspaceCreateDialog } from './components/workspace';
+export { WorkspaceDropdown, WorkspaceCreateButton } from './components/workspace';
 export { SessionList, SessionItem, SessionCreateButton, SessionGroupHeader } from './components/session';
 export { ChatTimeline, MessageBubble, ThinkingBlock, ToolCallDisplay, EmptyChat, StreamingIndicator } from './components/chat';
 export { Composer, ComposerInput, SendButton, SlashCommandMenu, MentionMenu, AttachmentPreviewBar, FileUploadButton } from './components/composer';

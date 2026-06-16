@@ -22,6 +22,7 @@ export function SessionCreateButton({ className }: SessionCreateButtonProps) {
     },
     onSuccess: (session) => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
       setActiveSession(session.id);
     },
   });

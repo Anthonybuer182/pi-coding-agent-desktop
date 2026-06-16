@@ -1,2 +1,2 @@
 export { WorkspaceDropdown } from './workspace-dropdown';
-export { WorkspaceCreateDialog } from './workspace-create-dialog';
+export { WorkspaceCreateButton } from './workspace-create-dialog';
