@@ -41,6 +41,90 @@ export class IPCTransport implements Transport {
     return response.result;
   }
 
+  /**
+   * Stream request via IPC events.
+   * Invokes a streaming handler in the main process, then listens for
+   * real-time chunks pushed back via ipcRenderer.on.
+   */
+  async streamRequest(
+    method: string,
+    params: unknown,
+    onEvent: (data: any) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (!this.ipc || !this.connected) {
+      throw new Error('IPC transport not connected');
+    }
+
+    const ipc = this.ipc;
+    const streamId = generateRequestId();
+    const chunkChannel = `pi:stream:chunk:${streamId}`;
+
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+
+      const chunkHandler = (data: any) => {
+        if (data?.type === 'done') {
+          cleanup();
+          if (!settled) { settled = true; resolve(); }
+          return;
+        }
+        if (data?.type === 'error') {
+          cleanup();
+          if (!settled) { settled = true; reject(new Error(data.error || 'Stream error')); }
+          return;
+        }
+        try { onEvent(data); } catch { /* ignore handler errors */ }
+      };
+
+      const cleanup = () => {
+        ipc.removeListener(chunkChannel, chunkHandler as (...args: unknown[]) => void);
+      };
+
+      // Listen for real-time chunks from main process
+      ipc.on(chunkChannel, chunkHandler as (...args: unknown[]) => void);
+
+      // Start the stream in main process
+      ipc.invoke('pi:sdk:stream', { method, params, streamId })
+        .then(() => {
+          // Invoke resolved normally — send done if not already settled
+          if (!settled) {
+            settled = true;
+            cleanup();
+            resolve();
+          }
+        })
+        .catch((err: unknown) => {
+          if (!settled) {
+            settled = true;
+            cleanup();
+            reject(err instanceof Error ? err : new Error(String(err)));
+          }
+        });
+
+      // Handle abort signal
+      if (signal) {
+        if (signal.aborted) {
+          cleanup();
+          if (!settled) {
+            settled = true;
+            reject(new DOMException('Stream aborted', 'AbortError'));
+          }
+          return;
+        }
+        const onAbort = () => {
+          ipc.invoke('pi:sdk:stream:abort', { streamId }).catch(() => {});
+          cleanup();
+          if (!settled) {
+            settled = true;
+            reject(new DOMException('Stream aborted', 'AbortError'));
+          }
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
+  }
+
   on(event: TransportEventType, handler: TransportEventHandler): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());

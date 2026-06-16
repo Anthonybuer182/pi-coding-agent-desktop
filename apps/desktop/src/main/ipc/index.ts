@@ -4,13 +4,15 @@ import {
   createRealSessionService,
   createRealFileService,
   createRealConfigService,
+  createRealChatService,
 } from '@pi/sdk-wrapper/adapters';
-import type { WorkspaceService, SessionService, FileService, ConfigService, SendMessageParams } from '@pi/sdk-wrapper';
+import type { WorkspaceService, SessionService, FileService, ConfigService, ChatService, SendMessageParams } from '@pi/sdk-wrapper';
 
 const workspaceService: WorkspaceService = createRealWorkspaceService();
 const sessionService: SessionService = createRealSessionService();
 const fileService: FileService = createRealFileService();
 const configService: ConfigService = createRealConfigService(process.cwd());
+const chatService: ChatService = createRealChatService(process.cwd());
 
 interface SdkRequest {
   id: string;
@@ -19,6 +21,7 @@ interface SdkRequest {
 }
 
 export function registerIpcHandlers(): void {
+  // ── Standard request/response ──
   ipcMain.handle('pi:sdk:request', async (_event, request: SdkRequest) => {
     const { id, method, params } = request;
     try {
@@ -33,6 +36,41 @@ export function registerIpcHandlers(): void {
         },
       };
     }
+  });
+
+  // ── Streaming request ──
+  ipcMain.handle('pi:sdk:stream', async (event, { method, params, streamId }) => {
+    const [service, action] = (method as string).split('.');
+    if (service !== 'chat' || action !== 'sendMessageStream') {
+      event.sender.send('pi:stream:chunk:' + streamId, {
+        type: 'error',
+        error: `Unsupported streaming method: ${method}`,
+      });
+      return;
+    }
+
+    const p = params as unknown as SendMessageParams;
+
+    try {
+      await chatService.sendMessageStream(
+        p,
+        (chunk) => {
+          event.sender.send('pi:stream:chunk:' + streamId, chunk);
+        },
+      );
+      event.sender.send('pi:stream:chunk:' + streamId, { type: 'done' });
+    } catch (err) {
+      event.sender.send('pi:stream:chunk:' + streamId, {
+        type: 'error',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  });
+
+  // ── Stream abort (for AbortSignal-based cancellation from renderer) ──
+  ipcMain.handle('pi:sdk:stream:abort', async (_event, { streamId }) => {
+    // Use the shared chatService — stopGeneration aborts all active sessions
+    await chatService.stopGeneration(streamId);
   });
 }
 
@@ -84,31 +122,18 @@ async function handleSession(action: string, params: unknown): Promise<unknown> 
 async function handleChat(action: string, params: unknown): Promise<unknown> {
   const p = params as Record<string, unknown>;
   switch (action) {
-    case 'sendMessage': {
-      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
-      const chatService = createRealChatService(process.cwd());
+    case 'sendMessage':
       return chatService.sendMessage(p as unknown as SendMessageParams);
-    }
-    case 'getMessages': {
-      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
-      const chatService = createRealChatService(process.cwd());
+    case 'getMessages':
       return chatService.getMessages(p.sessionId as string, p.limit as number | undefined, p.offset as number | undefined);
-    }
-    case 'stopGeneration': {
-      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
-      const chatService = createRealChatService(process.cwd());
+    case 'stopGeneration':
       return chatService.stopGeneration(p.sessionId as string);
-    }
-    case 'steer': {
-      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
-      const chatService = createRealChatService(process.cwd());
+    case 'steer':
       return chatService.steer(p.sessionId as string, p.content as string, p.images as any);
-    }
-    case 'followUp': {
-      const { createRealChatService } = await import('@pi/sdk-wrapper/adapters');
-      const chatService = createRealChatService(process.cwd());
+    case 'followUp':
       return chatService.followUp(p.sessionId as string, p.content as string, p.images as any);
-    }
+    case 'navigateTree':
+      return chatService.navigateTree(p.sessionId as string, p.entryId as string, p.options as any);
     default: throw new Error(`Unknown chat action: ${action}`);
   }
 }

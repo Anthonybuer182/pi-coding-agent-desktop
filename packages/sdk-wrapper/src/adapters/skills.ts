@@ -1,41 +1,4 @@
-import { loadSkills, type Skill as RealSkill } from '@earendil-works/pi-coding-agent';
-import type { Skill, SlashCommand } from '@pi/types';
-
-/**
- * Load skills from the real SDK and convert to our Skill type.
- */
-export async function loadRealSkills(cwd: string, agentDir: string): Promise<Skill[]> {
-  const result = await loadSkills({
-    cwd,
-    agentDir,
-    skillPaths: [],
-    includeDefaults: true,
-  });
-
-  return result.skills.map(realSkillToSkill);
-}
-
-function realSkillToSkill(s: RealSkill): Skill {
-  return {
-    id: `skill-${s.name.toLowerCase().replace(/\s+/g, '-')}`,
-    name: s.name,
-    description: s.description,
-    category: 'custom',
-    enabled: !s.disableModelInvocation,
-  };
-}
-
-/**
- * Build slash commands from available skills.
- */
-export function skillsToSlashCommands(skills: Skill[]): SlashCommand[] {
-  return skills.map((s) => ({
-    id: `sc-${s.id}`,
-    name: `/${s.name}`,
-    description: s.description,
-    category: 'skill',
-  }));
-}
+import type { SlashCommand } from '@pi/types';
 
 /**
  * Default built-in slash commands.
