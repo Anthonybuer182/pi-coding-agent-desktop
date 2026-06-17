@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from 'electron';
+import { ipcMain, dialog, app } from 'electron';
+import { ModelRegistry, AuthStorage } from '@earendil-works/pi-coding-agent';
 import {
   createRealWorkspaceService,
   createRealSessionService,
@@ -8,11 +9,13 @@ import {
 } from '@pi/sdk-wrapper/adapters';
 import type { WorkspaceService, SessionService, FileService, ConfigService, ChatService, SendMessageParams } from '@pi/sdk-wrapper';
 
-const workspaceService: WorkspaceService = createRealWorkspaceService();
-const sessionService: SessionService = createRealSessionService();
-const fileService: FileService = createRealFileService();
-const configService: ConfigService = createRealConfigService(process.cwd());
-const chatService: ChatService = createRealChatService(process.cwd());
+// Services are created during registerIpcHandlers() (called from app.whenReady)
+// to avoid module-load-time initialization in packaged builds.
+let workspaceService: WorkspaceService;
+let sessionService: SessionService;
+let fileService: FileService;
+let configService: ConfigService;
+let chatService: ChatService;
 
 interface SdkRequest {
   id: string;
@@ -21,6 +24,19 @@ interface SdkRequest {
 }
 
 export function registerIpcHandlers(): void {
+  // Shared ModelRegistry so config writes refresh chat's visible model list
+  const sharedModelRegistry = ModelRegistry.create(AuthStorage.inMemory());
+
+  // app.getPath('home') is stable across platforms and never points inside
+  // the app bundle (unlike process.cwd() in packaged builds).
+  const defaultCwd = app.getPath('home');
+
+  workspaceService = createRealWorkspaceService();
+  sessionService = createRealSessionService();
+  fileService = createRealFileService();
+  configService = createRealConfigService(defaultCwd, undefined, sharedModelRegistry);
+  chatService = createRealChatService(defaultCwd, sharedModelRegistry);
+
   // ── Standard request/response ──
   ipcMain.handle('pi:sdk:request', async (_event, request: SdkRequest) => {
     const { id, method, params } = request;
@@ -69,7 +85,6 @@ export function registerIpcHandlers(): void {
 
   // ── Stream abort (for AbortSignal-based cancellation from renderer) ──
   ipcMain.handle('pi:sdk:stream:abort', async (_event, { streamId }) => {
-    // Use the shared chatService — stopGeneration aborts all active sessions
     await chatService.stopGeneration(streamId);
   });
 }

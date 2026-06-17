@@ -5,17 +5,30 @@ import { registerNativeIpcHandlers } from '@main/ipc/native';
 
 let mainWindow: BrowserWindow | null = null;
 
-app.whenReady().then(() => {
-  mainWindow = createMainWindow();
-  registerIpcHandlers();
-  registerNativeIpcHandlers();
+const gotLock = app.requestSingleInstanceLock();
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = createMainWindow();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
     }
   });
-});
+
+  app.whenReady().then(() => {
+    mainWindow = createMainWindow();
+    registerIpcHandlers();
+    registerNativeIpcHandlers();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        mainWindow = createMainWindow();
+      }
+    });
+  });
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

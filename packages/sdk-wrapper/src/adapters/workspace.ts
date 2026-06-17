@@ -23,8 +23,14 @@ function decodeSessionDir(dirName: string): string | null {
   if (!dirName.startsWith('--') || !dirName.endsWith('--')) return null;
   const inner = dirName.slice(2, -2);
   if (!inner) return null;
-  // Reverse the encoding: replace - back to /
-  const candidate = '/' + inner.replace(/-/g, '/');
+  // Reverse the encoding: replace - back to path separator.
+  // On Windows paths the drive letter (C:) is encoded as "C-", so we
+  // check the platform to decide the separator, avoiding ambiguity with
+  // single-letter directory names on macOS.
+  const isWin = process.platform === 'win32';
+  const candidate = isWin
+    ? inner.charAt(0) + ':' + inner.slice(1).replace(/-/g, '\\')
+    : '/' + inner.replace(/-/g, '/');
   return existsSync(candidate) ? candidate : null;
 }
 

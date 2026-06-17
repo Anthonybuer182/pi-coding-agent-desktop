@@ -633,6 +633,11 @@ export function Composer() {
         }
       }
     },
+    onSettled: () => {
+      // Clear attachments after mutation completes (success or error),
+      // so the mutationFn can read them from the store during execution.
+      useComposerStore.getState().clearAttachments();
+    },
   });
 
   // Stable ref for sendMutation.mutate to avoid stale closure issues in callbacks
@@ -787,8 +792,9 @@ export function Composer() {
 
     sendMutation.mutate(value);
     setValue('');
-    clearAttachments();
-  }, [value, activeSessionId, sendMutation, setValue, clearAttachments, handleSlashCommand]);
+    // Don't clear attachments here — mutationFn needs them.
+    // clearAttachments() is called in onSettled after the send completes.
+  }, [value, activeSessionId, sendMutation, setValue, handleSlashCommand]);
 
   const handleSlashDetect = useCallback(
     (query: string) => {

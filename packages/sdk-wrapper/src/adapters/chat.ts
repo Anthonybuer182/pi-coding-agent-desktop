@@ -12,13 +12,13 @@ import type { AgentSession } from '@earendil-works/pi-coding-agent';
  * For existing sessions, opens via SessionManager and attaches to AgentSession.
  * For new sessions, creates via SessionManager.create().
  */
-export function createRealChatService(cwd: string): ChatService {
+export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry): ChatService {
   const activeSessions = new Map<string, { session: AgentSession; unsubscribe: () => void; cwd: string }>();
   // Track last message end time per session for thinking time calculation
   const sessionTimings = new Map<string, number>();
 
   // Shared ModelRegistry — picks up built-in models + models from ~/.pi/agent/models.json
-  const modelRegistry = ModelRegistry.create(AuthStorage.inMemory());
+  const registry = modelRegistry ?? ModelRegistry.create(AuthStorage.inMemory());
 
   /** Find a model in the registry by its ID string.
    *  Supports "provider/modelId" format for disambiguation.
@@ -29,17 +29,12 @@ export function createRealChatService(cwd: string): ChatService {
     if (slashIdx > 0) {
       const provider = modelId.substring(0, slashIdx);
       const id = modelId.substring(slashIdx + 1);
-      return modelRegistry.getAll().find((m) => m.id === id && m.provider === provider);
+      return registry.getAvailable().find((m) => m.id === id && m.provider === provider);
     }
-    // First, search only models that have configured auth (API key or OAuth)
-    const available = modelRegistry.getAvailable();
+    // Only return models that have configured auth (API key or OAuth)
+    const available = registry.getAvailable();
     for (let i = available.length - 1; i >= 0; i--) {
       if (available[i].id === modelId) return available[i];
-    }
-    // Fall back to all models (may not have auth configured)
-    const all = modelRegistry.getAll();
-    for (let i = all.length - 1; i >= 0; i--) {
-      if (all[i].id === modelId) return all[i];
     }
     return undefined;
   }
@@ -233,7 +228,7 @@ export function createRealChatService(cwd: string): ChatService {
     const { session } = await createAgentSession({
       cwd: workCwd,
       sessionManager,
-      modelRegistry, // share registry so custom models are visible
+      modelRegistry: registry, // share registry so custom models are visible
       resourceLoader: await createResourceLoader(workCwd),
     });
 
@@ -253,9 +248,10 @@ export function createRealChatService(cwd: string): ChatService {
         // Switch to the requested model if specified
         if (params.modelId) {
           const model = findModelById(params.modelId);
-          if (model) {
-            await session.setModel(model);
+          if (!model) {
+            throw new Error(`Model "${params.modelId}" not found. Please configure a valid model in Settings or set the correct API key environment variable.`);
           }
+          await session.setModel(model);
         }
 
         const images = params.attachments?.length
@@ -268,8 +264,8 @@ export function createRealChatService(cwd: string): ChatService {
               }))
           : undefined;
         await session.prompt(params.content, images?.length ? { images } : undefined);
-      } catch (_err) {
-        // Error surfaced via return value instead of throw
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : 'Failed to send message');
       }
 
       // Get session stats for cost/usage on the returned message
@@ -646,9 +642,12 @@ export function createRealChatService(cwd: string): ChatService {
         // Switch to the requested model if specified
         if (params.modelId) {
           const model = findModelById(params.modelId);
-          if (model) {
-            await session.setModel(model);
+          if (!model) {
+            const errMsg = `Model "${params.modelId}" not found. Please configure a valid model in Settings or set the correct API key environment variable.`;
+            safeChunk({ type: 'error', error: errMsg });
+            throw new Error(errMsg);
           }
+          await session.setModel(model);
         }
 
         // Build image content array for vision models

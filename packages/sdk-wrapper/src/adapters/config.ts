@@ -128,9 +128,9 @@ function refreshConfiguredProviders(modelRegistry: ModelRegistry): Set<string> {
   return providers;
 }
 
-export function createRealConfigService(cwd: string, agentDir?: string): ConfigService {
+export function createRealConfigService(cwd: string, agentDir?: string, modelRegistry?: ModelRegistry): ConfigService {
   const settings = SettingsManager.create(cwd, agentDir);
-  const modelRegistry = ModelRegistry.create(AuthStorage.inMemory());
+  const registry = modelRegistry ?? ModelRegistry.create(AuthStorage.inMemory());
 
   // Determine which providers have usable auth (mutable after models.json writes)
   let configuredProviders = getConfiguredModelProviders();
@@ -141,10 +141,19 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
       const projectSettings = settings.getProjectSettings();
       const merged = { ...globalSettings, ...projectSettings };
 
+      let rawDefaultModelId = settings.getDefaultModel() || merged.defaultModel || 'claude-sonnet-4';
+
+      // Validate: only keep the default model if it's actually available (has configured auth)
+      const availableModels = registry.getAvailable();
+      if (rawDefaultModelId && availableModels.length > 0 &&
+          !availableModels.some((m) => m.id === rawDefaultModelId)) {
+        rawDefaultModelId = availableModels[0].id;
+      }
+
       return {
         theme: (merged.theme as Config['theme']) ?? 'system',
         compactMode: false,
-        defaultModelId: settings.getDefaultModel() || merged.defaultModel || 'claude-sonnet-4',
+        defaultModelId: rawDefaultModelId,
         defaultThinkLevel: toConfigThinkLevel(settings.getDefaultThinkingLevel()),
         autoSave: true,
         fontSize: 14,
@@ -168,7 +177,9 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
     },
 
     async listModels(): Promise<ModelInfo[]> {
-      const models = modelRegistry.getAll().filter((m) =>
+      // Refresh from disk so listModels and getModelsConfig stay in sync
+      configuredProviders = refreshConfiguredProviders(registry);
+      const models = registry.getAll().filter((m) =>
         configuredProviders.has(m.provider),
       );
       return models.map((m) => ({
@@ -190,21 +201,21 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
 
     async saveModelsConfig(config: ModelsConfig): Promise<void> {
       writeModelsConfig(config);
-      configuredProviders = refreshConfiguredProviders(modelRegistry);
+      configuredProviders = refreshConfiguredProviders(registry);
     },
 
     async upsertProvider(name: string, provider: ProviderEntry): Promise<void> {
       const current = readModelsConfig();
       current.providers[name] = provider;
       writeModelsConfig(current);
-      configuredProviders = refreshConfiguredProviders(modelRegistry);
+      configuredProviders = refreshConfiguredProviders(registry);
     },
 
     async deleteProvider(name: string): Promise<void> {
       const current = readModelsConfig();
       delete current.providers[name];
       writeModelsConfig(current);
-      configuredProviders = refreshConfiguredProviders(modelRegistry);
+      configuredProviders = refreshConfiguredProviders(registry);
     },
 
     async addModel(providerName: string, model: ModelEntry): Promise<void> {
@@ -216,7 +227,7 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
       }
       provider.models.push(model);
       writeModelsConfig(current);
-      configuredProviders = refreshConfiguredProviders(modelRegistry);
+      configuredProviders = refreshConfiguredProviders(registry);
     },
 
     async deleteModel(providerName: string, modelId: string): Promise<void> {
@@ -225,7 +236,7 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
       if (!provider) throw new Error(`Provider "${providerName}" does not exist`);
       provider.models = provider.models.filter((m) => m.id !== modelId);
       writeModelsConfig(current);
-      configuredProviders = refreshConfiguredProviders(modelRegistry);
+      configuredProviders = refreshConfiguredProviders(registry);
     },
 
     async updateModel(providerName: string, modelId: string, model: Partial<ModelEntry>): Promise<void> {
@@ -236,7 +247,7 @@ export function createRealConfigService(cwd: string, agentDir?: string): ConfigS
       if (idx === -1) throw new Error(`Model "${modelId}" does not exist`);
       provider.models[idx] = { ...provider.models[idx], ...model, id: modelId };
       writeModelsConfig(current);
-      configuredProviders = refreshConfiguredProviders(modelRegistry);
+      configuredProviders = refreshConfiguredProviders(registry);
     },
   };
 }
