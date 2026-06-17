@@ -10,10 +10,10 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf out dist",
     "start": "electron .",
-    "pack:mac": "node scripts/prepare-pack.cjs && pnpm build && electron-builder --mac",
-    "pack:win": "node scripts/prepare-pack.cjs && pnpm build && electron-builder --win",
-    "pack:linux": "node scripts/prepare-pack.cjs && pnpm build && electron-builder --linux",
-    "pack:all": "node scripts/prepare-pack.cjs && pnpm build && electron-builder --mac --win --linux"
+    "pack:mac": "pnpm build && node scripts/prepare-pack.cjs && electron-builder --mac",
+    "pack:win": "pnpm build && node scripts/prepare-pack.cjs && electron-builder --win",
+    "pack:linux": "pnpm build && node scripts/prepare-pack.cjs && electron-builder --linux",
+    "pack:all": "pnpm build && node scripts/prepare-pack.cjs && electron-builder --mac --win --linux"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.78.1",
