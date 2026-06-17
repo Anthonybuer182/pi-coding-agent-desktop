@@ -3,6 +3,12 @@ import { persist } from 'zustand/middleware';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'connecting';
 
+interface MemoryPreview {
+  fileName: string;
+  mimeType: string;
+  data: string;
+}
+
 interface UIState {
   activeWorkspaceId: string | null;
   activeSessionId: string | null;
@@ -15,6 +21,7 @@ interface UIState {
   selectedSkills: string[];
   connectionStatus: ConnectionStatus;
   searchQuery: string;
+  memoryPreviews: Record<string, MemoryPreview>;
 
   setActiveWorkspace: (id: string | null) => void;
   setActiveSession: (id: string | null) => void;
@@ -27,6 +34,8 @@ interface UIState {
   toggleSkill: (skillId: string) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setSearchQuery: (query: string) => void;
+  setMemoryPreview: (id: string, info: MemoryPreview) => void;
+  clearMemoryPreview: (id: string) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -43,6 +52,7 @@ export const useUIStore = create<UIState>()(
       selectedSkills: ['skill-officecli', 'skill-filesystem'],
       connectionStatus: 'connecting',
       searchQuery: '',
+      memoryPreviews: {},
 
       setActiveWorkspace: (id) => set({ activeWorkspaceId: id, activeSessionId: null }),
       setActiveSession: (id) => set({ activeSessionId: id }),
@@ -60,6 +70,14 @@ export const useUIStore = create<UIState>()(
         })),
       setConnectionStatus: (status) => set({ connectionStatus: status }),
       setSearchQuery: (query) => set({ searchQuery: query }),
+      setMemoryPreview: (id, info) =>
+        set((s) => ({ memoryPreviews: { ...s.memoryPreviews, [id]: info } })),
+      clearMemoryPreview: (id) =>
+        set((s) => {
+          const next = { ...s.memoryPreviews };
+          delete next[id];
+          return { memoryPreviews: next };
+        }),
     }),
     {
       name: 'pi-ui-storage',

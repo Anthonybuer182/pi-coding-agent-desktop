@@ -80,11 +80,13 @@ function formatFileSize(bytes?: number): string {
 export function FileBlockDisplay({ block }: FileBlockDisplayProps) {
   const [expanded, setExpanded] = useState(false);
   const setActivePreviewFile = useUIStore((s) => s.setActivePreviewFile);
+  const setMemoryPreview = useUIStore((s) => s.setMemoryPreview);
   const displayName = block.fileName || block.content || 'Unknown file';
   const Icon = getFileIcon(block.mimeType, block.fileName);
   const showPreview = PRESENTABLE_TEXT_TYPES.has(block.mimeType) && block.data;
   const expandable = isExpandable(block.mimeType);
   const canOpenInPanel = !!block.workspacePath && isPreviewableInRightPanel(block.workspacePath);
+  const hasMemoryData = !block.workspacePath && !!block.data;
 
   let previewText = '';
   if (showPreview && block.data) {
@@ -102,12 +104,24 @@ export function FileBlockDisplay({ block }: FileBlockDisplayProps) {
   }
 
   const handleClick = () => {
-    if (canOpenInPanel && block.workspacePath) {
+    // Always open in right panel if possible — same behavior as Files sidebar
+    if (hasMemoryData && block.data) {
+      const virtualPath = `__memory__/${displayName}`;
+      setMemoryPreview(virtualPath, {
+        fileName: displayName,
+        mimeType: block.mimeType,
+        data: block.data,
+      });
+      setActivePreviewFile(virtualPath);
+    } else if (canOpenInPanel && block.workspacePath) {
       setActivePreviewFile(block.workspacePath);
     } else {
       setExpanded(!expanded);
     }
   };
+
+  // Whether the click action opens the right panel (like Files sidebar click)
+  const opensRightPanel = canOpenInPanel || hasMemoryData;
 
   return (
     <div className="my-1 rounded-lg border bg-muted/30 overflow-hidden">
@@ -116,7 +130,7 @@ export function FileBlockDisplay({ block }: FileBlockDisplayProps) {
         onClick={handleClick}
         className={cn(
           'flex items-center gap-2.5 w-full px-3 py-2.5 hover:bg-muted/50 transition-colors text-left',
-          canOpenInPanel && 'cursor-pointer',
+          opensRightPanel && 'cursor-pointer',
         )}
       >
         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -127,15 +141,16 @@ export function FileBlockDisplay({ block }: FileBlockDisplayProps) {
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {canOpenInPanel && (
+          {opensRightPanel && (
             <ExternalLink className="h-3.5 w-3.5 text-blue-500" />
           )}
-          {!canOpenInPanel && expandable && (
+          {!opensRightPanel && expandable && (
             expanded
               ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
               : <Eye className="h-3.5 w-3.5 text-muted-foreground" />
           )}
-          {block.data && (
+          {/* Only show download for workspace files — attached files are local */}
+          {canOpenInPanel && block.data && (
             <a
               href={`data:${block.mimeType};base64,${block.data}`}
               download={displayName}

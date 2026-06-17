@@ -41,6 +41,7 @@ export function Composer() {
   const selectedSkills = useUIStore((s) => s.selectedSkills);
   const toggleSkill = useUIStore((s) => s.toggleSkill);
   const setActivePreviewFile = useUIStore((s) => s.setActivePreviewFile);
+  const setMemoryPreview = useUIStore((s) => s.setMemoryPreview);
   const setActiveSession = useUIStore((s) => s.setActiveSession);
   const {
     value,
@@ -281,12 +282,16 @@ export function Composer() {
 
   const sendMutation = useMutation({
     onMutate: async (content: string) => {
+      // Capture attachments BEFORE the await, since handleSubmit calls
+      // clearAttachments() synchronously after mutate(), and the await
+      // in cancelQueries yields control allowing clearAttachments to run.
+      const currentAttachments = useComposerStore.getState().pendingAttachments;
+
       // Cancel outgoing refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['session', activeSessionId] });
       const previousSession = queryClient.getQueryData(['session', activeSessionId]);
 
       // Build user message blocks from attachments for inline preview
-      const currentAttachments = useComposerStore.getState().pendingAttachments;
       const userBlocks: ContentBlock[] = [];
       if (currentAttachments.length > 0) {
         // Text content block
@@ -317,6 +322,19 @@ export function Composer() {
               fileSize: att.size,
             });
           }
+        }
+      }
+
+      // Register attachment data in memoryPreviews so file blocks remain
+      // clickable even after cache invalidation removes optimistic blocks
+      for (const att of currentAttachments) {
+        if (att.data) {
+          const virtualPath = `__memory__/${att.name}`;
+          useUIStore.getState().setMemoryPreview(virtualPath, {
+            fileName: att.name,
+            mimeType: att.mimeType,
+            data: att.data,
+          });
         }
       }
 
@@ -544,6 +562,26 @@ export function Composer() {
         const lastFile = fileBlocks[fileBlocks.length - 1];
         if (lastFile.workspacePath && isPreviewableInRightPanel(lastFile.workspacePath)) {
           setActivePreviewFile(lastFile.workspacePath);
+        }
+      }
+
+      // Register user file blocks with data in memoryPreviews so they
+      // can be opened in the right panel even without workspacePath
+      const session = queryClient.getQueryData(['session', activeSessionId]) as any;
+      if (session?.messages) {
+        for (const msg of session.messages) {
+          if (msg.role === 'user' && msg.blocks) {
+            for (const b of msg.blocks) {
+              if (b.type === 'file' && b.data && !b.workspacePath && b.fileName) {
+                const virtualPath = `__memory__/${b.fileName}`;
+                useUIStore.getState().setMemoryPreview(virtualPath, {
+                  fileName: b.fileName,
+                  mimeType: b.mimeType,
+                  data: b.data,
+                });
+              }
+            }
+          }
         }
       }
 
