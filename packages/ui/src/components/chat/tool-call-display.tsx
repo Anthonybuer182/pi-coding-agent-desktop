@@ -64,7 +64,8 @@ export function ToolCallDisplay({ block, result, isStreaming, durationMs }: Tool
 
   return (
     <div className={cn(
-      'my-1 rounded-md border overflow-hidden text-xs animate-streaming-in',
+      'my-1 rounded-md border overflow-hidden text-xs',
+      !isStreaming && 'animate-streaming-in',
       isRunning
         ? 'border-emerald-400/40 bg-emerald-50/30 dark:bg-emerald-950/10'
         : statusColor,

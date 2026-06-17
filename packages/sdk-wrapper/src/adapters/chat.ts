@@ -98,6 +98,48 @@ export function createRealChatService(cwd: string): ChatService {
     return mimeMap[ext] || 'application/octet-stream';
   }
 
+  /**
+   * Extract <think>...</think> tags from text content.
+   * Some models (Minimax, DeepSeek-R1) return thinking content as XML tags
+   * in the text stream rather than as structured reasoning_content blocks.
+   *
+   * Returns the extracted thinking content (null if none) and the text
+   * with think tags stripped.
+   *
+   * Handles streaming partials:
+   *  - Incomplete <think> (no closing tag): all content treated as thinking
+   *  - Complete <think>...</think>: thinking extracted, text cleaned
+   *  - No think tag: thinking=null, text=original
+   */
+  function extractThinkContent(text: string): { thinking: string | null; text: string } {
+    // Fast path: no opening tag at all
+    if (!text.includes('<think>')) {
+      return { thinking: null, text };
+    }
+
+    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
+    let thinking = '';
+    const textParts: string[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = thinkRegex.exec(text)) !== null) {
+      // Text before this think block
+      textParts.push(text.slice(lastIndex, match.index));
+      // Thinking content
+      thinking += (thinking ? '\n' : '') + match[1];
+      lastIndex = match.index + match[0].length;
+    }
+    // Remaining text after last think block
+    textParts.push(text.slice(lastIndex));
+
+    const cleanText = textParts.join('').trim();
+    return {
+      thinking: thinking.trim() || null,
+      text: cleanText,
+    };
+  }
+
   /** Detect file paths written by tools, returning existing files with stats */
   function detectWrittenFiles(
     toolName: string,
@@ -282,6 +324,7 @@ export function createRealChatService(cwd: string): ChatService {
       let messageEndTime = 0;
       let outputText = '';
       let thinkingBlockId: string | null = null; // stable ID per message turn
+      let textBlockId: string | null = null; // stable ID per message turn
       const toolStartTimes = new Map<string, number>();
       const toolArgs = new Map<string, Record<string, unknown>>();
 
@@ -292,6 +335,7 @@ export function createRealChatService(cwd: string): ChatService {
           case 'message_start': {
             messageStartTime = Date.now();
             thinkingBlockId = null; // reset for new turn
+            textBlockId = null; // reset for new turn
             // Signal frontend that a new message group is starting,
             // so it creates fresh blocks instead of overwriting prior group.
             safeChunk({ type: 'message_start' });
@@ -305,14 +349,37 @@ export function createRealChatService(cwd: string): ChatService {
                 for (const block of content) {
                   if (block.type === 'text' && block.text) {
                     // block.text carries the full accumulated text, not a delta.
-                    // Send as block type so the composer replaces instead of appends.
                     outputText = block.text;
+
+                    // Extract <think>...</think> tags from text (Minimax, DeepSeek-R1).
+                    // These models return thinking content as XML tags in the text stream
+                    // rather than structured reasoning_content blocks.
+                    const thinkResult = extractThinkContent(block.text);
+
+                    // Emit thinking block when think content is present
+                    if (thinkResult.thinking !== null) {
+                      if (!thinkingBlockId) {
+                        thinkingBlockId = `b-think-${Date.now()}`;
+                      }
+                      safeChunk({
+                        type: 'block',
+                        block: {
+                          id: thinkingBlockId,
+                          type: 'thinking',
+                          content: thinkResult.thinking,
+                          thinking: thinkResult.thinking,
+                        },
+                      });
+                    }
+
+                    // Always emit text block with think tags stripped (may be empty during thinking phase)
+                    if (!textBlockId) textBlockId = `bt-stream-${Date.now()}`;
                     safeChunk({
                       type: 'block',
                       block: {
-                        id: `bt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                        id: textBlockId,
                         type: 'text',
-                        content: block.text,
+                        content: thinkResult.text,
                       },
                     });
                   } else if (block.type === 'image') {

@@ -64,7 +64,7 @@ export function ThinkingBlock({ block, isStreaming }: ThinkingBlockProps) {
   return (
     <div className={cn(
       'my-1 rounded-md border overflow-hidden text-xs',
-      'animate-streaming-in',
+      !isStreaming && 'animate-streaming-in',
       isStreaming ? 'border-border' : 'border-border',
     )}>
       <button

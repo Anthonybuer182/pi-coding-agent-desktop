@@ -468,6 +468,29 @@ export function Composer() {
       // Streaming state managed by reducer for consistent block ordering/dedup
       let streamState = initialStreamingState();
 
+      // -- rAF batching for block updates --
+      // Without batching, every streaming chunk triggers:
+      //   setStreamingBlocks → useMemo → makeStreamingMessage
+      //   → ReactMarkdown re-parse → DOM rebuild.
+      // Fast models (e.g. Qwen-VL Max) can fire 50+ chunks/second, causing
+      // visible flickering. rAF coalesces all chunks in a 16ms frame into
+      // a single state update, capping re-renders at ~60fps.
+      let pendingRaf = false;
+      const rafBlocks: { current: ContentBlock[] } = { current: [] };
+
+      function flushBlockUpdates() {
+        pendingRaf = false;
+        setStreamingBlocks(rafBlocks.current);
+      }
+
+      function scheduleBlockFlush(blocks: ContentBlock[]) {
+        rafBlocks.current = blocks;
+        if (!pendingRaf) {
+          pendingRaf = true;
+          requestAnimationFrame(flushBlockUpdates);
+        }
+      }
+
       await sdk.chat.sendMessageStream(
         {
           sessionId: activeSessionId,
@@ -479,13 +502,13 @@ export function Composer() {
         (chunk) => {
           if (chunk.type === 'message_start') {
             streamState = streamReducer(streamState, { type: 'message_start' });
-            setStreamingBlocks(streamState.blocks);
+            scheduleBlockFlush(streamState.blocks);
           } else if (chunk.type === 'block' && chunk.block) {
             streamState = streamReducer(streamState, { type: 'block', block: chunk.block as ContentBlock });
-            setStreamingBlocks(streamState.blocks);
+            scheduleBlockFlush(streamState.blocks);
           } else if (chunk.type === 'text' && chunk.content) {
             streamState = streamReducer(streamState, { type: 'text_delta', content: chunk.content });
-            setStreamingBlocks(streamState.blocks);
+            scheduleBlockFlush(streamState.blocks);
           } else if (chunk.type === 'usage' && chunk.usage) {
             setStreamingUsage(chunk.usage);
           } else if (chunk.type === 'context' && chunk.contextUsage) {

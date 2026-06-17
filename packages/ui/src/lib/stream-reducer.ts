@@ -163,9 +163,9 @@ export function streamReducer(
           };
           return { ...state, blocks: next };
         }
-        // No existing text block — create one.
+        // No existing text block — create one with a stable ID per turn.
         const newBlock = {
-          id: `text_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          id: `text-${state.turnStartIdx}`,
           type: 'text' as const,
           content: delta,
         };

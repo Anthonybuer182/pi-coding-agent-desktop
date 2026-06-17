@@ -87,7 +87,8 @@ export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) 
   return (
     <div
       className={cn(
-        'prose prose-sm dark:prose-invert max-w-none animate-streaming-in',
+        'prose prose-sm dark:prose-invert max-w-none',
+        !isStreaming && 'animate-streaming-in',
         'prose-pre:my-2 prose-pre:bg-muted/80 prose-pre:border prose-pre:border-border',
         'prose-code:bg-muted/50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none',
         'prose-headings:mb-2 prose-headings:mt-4 prose-headings:font-semibold',
