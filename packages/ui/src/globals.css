@@ -74,3 +74,25 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* Token badge styles for /command and @mention */
+.token-slash,
+.token-mention {
+  @apply inline-flex items-center px-1 py-0 rounded text-xs font-medium border;
+}
+
+.token-slash {
+  @apply bg-blue-500/10 text-blue-600 border-blue-500/20;
+}
+
+.token-mention {
+  @apply bg-emerald-500/10 text-emerald-600 border-emerald-500/20;
+}
+
+.dark .token-slash {
+  @apply bg-blue-400/15 text-blue-400 border-blue-400/20;
+}
+
+.dark .token-mention {
+  @apply bg-emerald-400/15 text-emerald-400 border-emerald-400/20;
+}

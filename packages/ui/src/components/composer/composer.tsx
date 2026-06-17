@@ -41,6 +41,7 @@ export function Composer() {
   const selectedSkills = useUIStore((s) => s.selectedSkills);
   const toggleSkill = useUIStore((s) => s.toggleSkill);
   const setActivePreviewFile = useUIStore((s) => s.setActivePreviewFile);
+  const setActiveSession = useUIStore((s) => s.setActiveSession);
   const {
     value,
     setValue,
@@ -75,11 +76,21 @@ export function Composer() {
     enqueueFollowUp,
     enqueueSteer,
     dequeueNext,
+    triggerScrollToBottom,
   } = useComposerStore();
 
   // Highlighted index for keyboard navigation in popup menus
   const [highlightedSlashIndex, setHighlightedSlashIndex] = useState(0);
   const [highlightedMentionIndex, setHighlightedMentionIndex] = useState(0);
+
+  // Pending token insert signal for ComposerInput contentEditable
+  const pendingTokenInsert = useRef<{ text: string; type: 'slash' | 'mention' } | null>(null);
+
+  // Version counter to force ComposerInput useEffect re-run when a token is selected
+  const [tokenInsertVersion, setTokenInsertVersion] = useState(0);
+
+  // Version counter to force ComposerInput refocus after file picker closes
+  const [focusVersion, setFocusVersion] = useState(0);
 
   // Config for model/think level
   const { data: config } = useQuery({
@@ -142,6 +153,8 @@ export function Composer() {
         };
         reader.readAsDataURL(file);
       });
+      // Restore focus to the input after the native file picker closes
+      setFocusVersion((v) => v + 1);
     },
     [addAttachment, updateAttachmentData],
   );
@@ -565,12 +578,156 @@ export function Composer() {
   const sendMutateRef = useRef(sendMutation.mutate);
   sendMutateRef.current = sendMutation.mutate;
 
+  /** Handle built-in slash commands locally without sending to LLM */
+  const handleSlashCommand = useCallback(
+    (text: string): boolean => {
+      const trimmed = text.trim();
+      const knownCommands = new Set(DEFAULT_SLASH_COMMANDS.map((c) => c.name));
+
+      // Strip arguments: /bash ls -la → /bash
+      const cmdName = trimmed.split(/\s+/)[0];
+      if (!knownCommands.has(cmdName)) return false;
+
+      const now = new Date().toISOString();
+      const insertPair = (assistantMsg: Record<string, unknown>) => {
+        const userMsg = {
+          id: `user-${Date.now()}`,
+          sessionId: activeSessionId,
+          role: 'user' as const,
+          status: 'complete' as const,
+          content: trimmed,
+          blocks: [],
+          createdAt: now,
+          updatedAt: now,
+        };
+        queryClient.setQueryData(['session', activeSessionId], (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: [...(old.messages || []), userMsg, assistantMsg],
+          };
+        });
+        triggerScrollToBottom();
+      };
+
+      if (cmdName === '/help') {
+        const helpContent = [
+          '# Pi Coding Agent',
+          '',
+          'I\'m your AI coding assistant. Here\'s what I can do:',
+          '',
+          '## Available Commands',
+          ...DEFAULT_SLASH_COMMANDS.map((c) => `- **${c.name}** — ${c.description}`),
+          '',
+          '## Skills',
+          ...DEFAULT_SKILLS.map((s) =>
+            `- **${s.name}** — ${s.description} (${s.enabled ? 'enabled' : 'disabled'})`,
+          ),
+          '',
+          '## Keyboard Shortcuts',
+          '- **Enter** — Send message',
+          '- **Shift+Enter** — New line',
+          '- **Ctrl+Enter** — Steer agent during streaming',
+          "- **/** — Open command menu for quick actions",
+          '- **@** — Mention files, workspaces, or sessions',
+          '',
+          '## Capabilities',
+          '- Read, write, and edit files in your workspace',
+          '- Execute shell commands via bash tool',
+          '- Search codebases with regex and glob patterns',
+          '- Manage multiple workspaces and sessions',
+          '- Attach images and files for AI analysis',
+          '- Stream responses with live progress updates',
+          '- Create and edit Office documents (.docx, .xlsx, .pptx)',
+          '- Build knowledge graphs from code',
+          '- UI/UX design intelligence for web and mobile apps',
+        ].join('\n');
+
+        insertPair({
+          id: `help-${Date.now()}`,
+          sessionId: activeSessionId,
+          role: 'assistant',
+          status: 'complete',
+          modelId: config?.defaultModelId ?? 'system',
+          content: helpContent,
+          blocks: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+        return true;
+      }
+
+      if (cmdName === '/clear') {
+        if (!activeWorkspaceId) return false;
+        // Create a new session and switch to it
+        sdk.session.create(activeWorkspaceId).then((session) => {
+          queryClient.invalidateQueries({ queryKey: ['sessions'] });
+          queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+          setActiveSession(session.id);
+        });
+        return true;
+      }
+
+      if (cmdName === '/config') {
+        const skills = DEFAULT_SKILLS
+          .filter((s) => selectedSkills.includes(s.id))
+          .map((s) => s.name)
+          .join(', ') || 'none';
+        const configContent = [
+          '## Current Configuration',
+          '',
+          `- **Model**: ${config?.defaultModelId ?? 'Not set'}`,
+          `- **Think Level**: ${config?.defaultThinkLevel ?? 'medium'}`,
+          `- **Skills**: ${skills}`,
+          `- **Compact Mode**: ${compactMode ? 'On' : 'Off'}`,
+          `- **Workspace**: ${activeWorkspaceId ?? 'None'}`,
+        ].join('\n');
+
+        insertPair({
+          id: `config-${Date.now()}`,
+          sessionId: activeSessionId,
+          role: 'assistant',
+          status: 'complete',
+          modelId: config?.defaultModelId ?? 'system',
+          content: configContent,
+          blocks: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+        return true;
+      }
+
+      // /bash, /file, /compact, /model — pass through to LLM
+      return false;
+    },
+    [
+      sdk,
+      activeSessionId,
+      activeWorkspaceId,
+      config,
+      compactMode,
+      selectedSkills,
+      queryClient,
+      setActiveSession,
+      triggerScrollToBottom,
+    ],
+  );
+
   const handleSubmit = useCallback(() => {
     if (!value.trim() || !activeSessionId || sendMutation.isPending) return;
+
+    // Intercept built-in slash commands before sending to LLM
+    const slashHandled = handleSlashCommand(value);
+    if (slashHandled) {
+      setValue('');
+      clearAttachments();
+      return;
+    }
+
     sendMutation.mutate(value);
     setValue('');
     clearAttachments();
-  }, [value, activeSessionId, sendMutation, setValue, clearAttachments]);
+  }, [value, activeSessionId, sendMutation, setValue, clearAttachments, handleSlashCommand]);
 
   const handleSlashDetect = useCallback(
     (query: string) => {
@@ -635,10 +792,14 @@ export function Composer() {
         cmd = filtered[highlightedSlashIndex];
         if (!cmd) return;
       }
+      // cmd.name already includes the / prefix (e.g. "/help")
+      const tokenText = cmd.name;
       const withoutSlash = value.replace(/\/(\w*)$/, '');
-      setValue(`${withoutSlash}${cmd.name} `);
+      setValue(`${withoutSlash}${tokenText}`);
+      pendingTokenInsert.current = { text: tokenText, type: 'slash' };
       setShowSlashMenu(false);
       setHighlightedSlashIndex(0);
+      setTokenInsertVersion((v) => v + 1);
     },
     [value, setValue, setShowSlashMenu, slashQuery, highlightedSlashIndex],
   );
@@ -663,10 +824,13 @@ export function Composer() {
         item = filtered[highlightedMentionIndex];
         if (!item) return;
       }
-      const withoutMention = value.replace(/@([\w-]*)$/, '');
-      setValue(`${withoutMention}@${item.label} `);
+      const withoutMention = value.replace(/@([^\s]*)$/, '');
+      const tokenText = `@${item.label}`;
+      setValue(`${withoutMention}${tokenText}`);
+      pendingTokenInsert.current = { text: tokenText, type: 'mention' };
       setShowMentionMenu(false);
       setHighlightedMentionIndex(0);
+      setTokenInsertVersion((v) => v + 1);
     },
     [value, setValue, setShowMentionMenu, mentionQuery, highlightedMentionIndex, mentionItems],
   );
@@ -747,6 +911,9 @@ export function Composer() {
           isStreaming={isStreaming}
           onSteerSubmit={handleSteerSubmit}
           onFollowUpSubmit={handleFollowUpSubmit}
+          pendingTokenInsert={pendingTokenInsert}
+          tokenInsertVersion={tokenInsertVersion}
+          focusVersion={focusVersion}
         />
 
         {/* Drag overlay */}

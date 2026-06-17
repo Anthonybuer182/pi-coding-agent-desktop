@@ -5,6 +5,7 @@ import { UserIcon, Bot, Clock, Zap, FileText, Copy, Pencil, Check, X } from 'luc
 import { ThinkingBlock } from './thinking-block';
 import { ToolCallDisplay } from './tool-call-display';
 import { MarkdownContent } from './markdown-content';
+import { renderTokenizedText } from '@/lib/token-parser';
 import { ImageBlockDisplay } from './image-block-display';
 import { FileBlockDisplay } from './file-block-display';
 import { Button } from '@/components/ui/button';
@@ -260,7 +261,7 @@ export function MessageBubble({
                 'rounded-lg px-4 py-2 text-sm',
                 isUser ? 'bg-primary text-primary-foreground' : 'bg-muted',
               )}>
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                <p className="whitespace-pre-wrap">{renderTokenizedText(message.content)}</p>
               </div>
             )}
             {hasUserMedia && (
@@ -274,7 +275,7 @@ export function MessageBubble({
             'rounded-lg px-4 py-2 text-sm',
             'bg-muted',
           )}>
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap">{renderTokenizedText(message.content)}</p>
           </div>
         ) : (
           <div className="flex flex-col">

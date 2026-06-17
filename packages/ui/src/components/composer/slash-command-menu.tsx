@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { SlashCommand } from '@pi/types';
 
@@ -9,6 +10,15 @@ interface SlashCommandMenuProps {
 }
 
 export function SlashCommandMenu({ commands, query, highlightedIndex, onSelect }: SlashCommandMenuProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Automatically scroll the highlighted item into view
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const el = containerRef.current.querySelector(`[data-index="${highlightedIndex}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [highlightedIndex]);
+
   const filtered = query
     ? commands.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
     : commands;
@@ -35,7 +45,7 @@ export function SlashCommandMenu({ commands, query, highlightedIndex, onSelect }
 
   return (
     <div className="absolute bottom-full left-0 mb-2 w-72 rounded-lg border bg-popover shadow-md z-50">
-      <div className="max-h-64 overflow-y-auto p-1">
+      <div ref={containerRef} className="max-h-64 overflow-y-auto p-1">
         {Object.entries(grouped).map(([category, cmds]) => (
           <div key={category}>
             <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-muted-foreground">
@@ -46,6 +56,7 @@ export function SlashCommandMenu({ commands, query, highlightedIndex, onSelect }
               return (
                 <div
                   key={cmd.id}
+                  data-index={idx}
                   className={cn(
                     'flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer',
                     idx === highlightedIndex && 'bg-accent text-accent-foreground',

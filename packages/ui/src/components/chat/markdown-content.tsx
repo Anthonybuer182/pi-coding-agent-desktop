@@ -6,6 +6,7 @@ import 'highlight.js/styles/github-dark.css';
 import { Check, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MermaidDiagram } from './mermaid-diagram';
+import { renderTokenizedText } from '@/lib/token-parser';
 import './chat-animations.css';
 
 interface MarkdownContentProps {
@@ -132,6 +133,14 @@ export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) 
                 {codeContent}
               </CodeBlock>
             );
+          },
+          p: ({ children, ...props }) => {
+            const text = extractText(children);
+            const hasToken = /(?:^|\s)(?:\/[a-zA-Z][\w-]*|@[\w][\w-]*)/.test(text);
+            if (hasToken) {
+              return <p {...props}>{renderTokenizedText(text)}</p>;
+            }
+            return <p {...props}>{children}</p>;
           },
           a: ({ children, href, ...props }) => (
             <a

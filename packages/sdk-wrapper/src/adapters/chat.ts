@@ -13,7 +13,7 @@ import type { AgentSession } from '@earendil-works/pi-coding-agent';
  * For new sessions, creates via SessionManager.create().
  */
 export function createRealChatService(cwd: string): ChatService {
-  const activeSessions = new Map<string, { session: AgentSession; unsubscribe: () => void }>();
+  const activeSessions = new Map<string, { session: AgentSession; unsubscribe: () => void; cwd: string }>();
   // Track last message end time per session for thinking time calculation
   const sessionTimings = new Map<string, number>();
 
@@ -163,12 +163,21 @@ export function createRealChatService(cwd: string): ChatService {
     workspaceCwd?: string,
   ): Promise<AgentSession> {
     const key = sessionId || 'default';
-
-    if (activeSessions.has(key)) {
-      return activeSessions.get(key)!.session;
-    }
-
     const workCwd = workspaceCwd || cwd;
+
+    // If a cached session exists, return it directly unless the caller provided
+    // an explicit workspaceCwd that differs from the session's cwd (e.g. user
+    // switched workspaces).  steer/followUp/navigateTree don't pass workspaceCwd,
+    // so they safely reuse the existing session.
+    const cached = activeSessions.get(key);
+    if (cached) {
+      if (!workspaceCwd || cached.cwd === workspaceCwd) {
+        return cached.session;
+      }
+      // cwd mismatch — tear down the old session and create a new one
+      cached.unsubscribe();
+      activeSessions.delete(key);
+    }
     let sessionManager: SessionManager;
 
     if (sessionId) {
@@ -190,7 +199,7 @@ export function createRealChatService(cwd: string): ChatService {
       // Events are handled at the call site level
     });
 
-    activeSessions.set(key, { session, unsubscribe });
+    activeSessions.set(key, { session, unsubscribe, cwd: workCwd });
     return session;
   }
 

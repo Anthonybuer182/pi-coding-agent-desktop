@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 export type MentionTarget = 'workspace' | 'session' | 'file' | 'folder' | 'code';
@@ -33,6 +34,15 @@ const typeLabels: Record<MentionTarget, string> = {
 };
 
 export function MentionMenu({ items, query, highlightedIndex, onSelect }: MentionMenuProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Automatically scroll the highlighted item into view
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const el = containerRef.current.querySelector(`[data-index="${highlightedIndex}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [highlightedIndex]);
+
   const filtered = query
     ? items.filter((i) => i.label.toLowerCase().includes(query.toLowerCase()))
     : items;
@@ -57,7 +67,7 @@ export function MentionMenu({ items, query, highlightedIndex, onSelect }: Mentio
 
   return (
     <div className="absolute bottom-full left-0 mb-2 w-80 rounded-lg border bg-popover shadow-md z-50">
-      <div className="max-h-72 overflow-y-auto p-1">
+      <div ref={containerRef} className="max-h-72 overflow-y-auto p-1">
         {Object.entries(grouped).map(([type, groupItems]) => (
           <div key={type}>
             <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-muted-foreground">
@@ -68,6 +78,7 @@ export function MentionMenu({ items, query, highlightedIndex, onSelect }: Mentio
               return (
                 <div
                   key={item.id}
+                  data-index={currentIdx}
                   className={cn(
                     'flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer',
                     currentIdx === highlightedIndex && 'bg-accent text-accent-foreground',

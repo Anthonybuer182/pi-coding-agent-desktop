@@ -27,6 +27,9 @@ interface ComposerState {
   /** Editing mode: current text content of the editing textarea */
   editingContent: string;
 
+  /** Whether to trigger a smooth scroll to bottom in Virtuoso (incremented per request) */
+  scrollToBottomTrigger: number;
+
   /** Steering and follow-up message queues */
   steeringQueue: string[];
   followUpQueue: string[];
@@ -64,6 +67,8 @@ interface ComposerState {
   setToolTiming: (timing: ToolTiming) => void;
   setStreamError: (error: string | null) => void;
   setTriggerSend: (content: string) => void;
+  /** Signal the chat timeline to scroll to bottom (e.g. after inserting a slash command message) */
+  triggerScrollToBottom: () => void;
   /** Enter edit mode: track entry and message IDs for navigateTree on send */
   setEditingMessage: (entryId: string, messageId: string, initialContent: string) => void;
   /** Set editing content (e.g. as user types in the textarea) */
@@ -94,6 +99,7 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
   toolTimings: new Map(),
   streamError: null,
   triggerSend: 0,
+  scrollToBottomTrigger: 0,
   editingEntryId: null,
   editingMessageId: null,
   editingContent: '',
@@ -151,6 +157,7 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
   setContextUsage: (contextUsage) => set({ contextUsage }),
   setStreamError: (streamError) => set({ streamError }),
   setTriggerSend: (content) => set((s) => ({ value: content, triggerSend: s.triggerSend + 1 })),
+  triggerScrollToBottom: () => set((s) => ({ scrollToBottomTrigger: s.scrollToBottomTrigger + 1 })),
   setEditingMessage: (entryId, messageId, initialContent) =>
     set({ editingEntryId: entryId, editingMessageId: messageId, editingContent: initialContent }),
   setEditingContent: (content) => set({ editingContent: content }),

@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useCallback } from 'react';
+import { useRef, useMemo, useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { ArrowDown, AlertTriangle, RefreshCw, MessageSquare } from 'lucide-react';
@@ -112,6 +112,7 @@ export function ChatTimeline() {
   const messageTiming = useComposerStore((s) => s.messageTiming);
   const toolTimings = useComposerStore((s) => s.toolTimings);
   const streamError = useComposerStore((s) => s.streamError);
+  const scrollToBottomTrigger = useComposerStore((s) => s.scrollToBottomTrigger);
   const setTriggerSend = useComposerStore((s) => s.setTriggerSend);
   const setEditingMessage = useComposerStore((s) => s.setEditingMessage);
   const clearEditingMessage = useComposerStore((s) => s.clearEditingMessage);
@@ -129,6 +130,13 @@ export function ChatTimeline() {
   });
 
   const storedMessages = session?.messages ?? [];
+
+  // Scroll to bottom when a slash command inserts a message via setQueryData
+  useEffect(() => {
+    if (scrollToBottomTrigger > 0 && virtuosoRef.current && messages.length > 0) {
+      virtuosoRef.current.scrollToIndex(messages.length - 1);
+    }
+  }, [scrollToBottomTrigger]);
 
   // Stable timestamp: capture once at the start of streaming
   if (isStreaming && !streamingStartRef.current) {
