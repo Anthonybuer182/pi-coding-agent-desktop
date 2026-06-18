@@ -1,4 +1,4 @@
-import type { TransportEvent, TransportEventHandler, TransportEventType } from '@pi/types';
+import type { TransportEventHandler, TransportEventType } from '@pi/types';
 import type { Transport } from './base.js';
 import { generateRequestId } from './base.js';
 
@@ -97,7 +97,13 @@ export class HTTPTransport implements Transport {
   }
 
   off(event: TransportEventType, handler: TransportEventHandler): void {
-    this.listeners.get(event)?.delete(handler);
+    const set = this.listeners.get(event);
+    if (set) {
+      set.delete(handler);
+      if (set.size === 0) {
+        this.listeners.delete(event);
+      }
+    }
   }
 
   isConnected(): boolean {

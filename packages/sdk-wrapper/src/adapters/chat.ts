@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { ChatService, SendMessageParams, StreamChunk } from '../services/chat.js';
 import type { Message, AssistantMessage, ContentBlock, TokenUsage, ContextUsageInfo, SessionStatsInfo, MessageTiming } from '@pi/types';
-import { createAgentSession, SessionManager, ModelRegistry, AuthStorage, DefaultResourceLoader, getAgentDir } from '@earendil-works/pi-coding-agent';
+import { createAgentSession, SessionManager, ModelRegistry, AuthStorage, DefaultResourceLoader, getAgentDir, SettingsManager } from '@earendil-works/pi-coding-agent';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
 
 /**
@@ -12,7 +12,7 @@ import type { AgentSession } from '@earendil-works/pi-coding-agent';
  * For existing sessions, opens via SessionManager and attaches to AgentSession.
  * For new sessions, creates via SessionManager.create().
  */
-export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry): ChatService {
+export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry, settingsManager?: SettingsManager): ChatService {
   const activeSessions = new Map<string, { session: AgentSession; unsubscribe: () => void; cwd: string }>();
   // Track last message end time per session for thinking time calculation
   const sessionTimings = new Map<string, number>();
@@ -230,6 +230,7 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       sessionManager,
       modelRegistry: registry, // share registry so custom models are visible
       resourceLoader: await createResourceLoader(workCwd),
+      settingsManager,         // share settings so shell path is respected
     });
 
     const unsubscribe = session.subscribe((_event) => {
@@ -730,8 +731,17 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       }
     },
 
-    async stopGeneration(): Promise<void> {
-      // Abort all active sessions
+    async stopGeneration(sessionId?: string): Promise<void> {
+      if (sessionId) {
+        const entry = activeSessions.get(sessionId);
+        if (entry) {
+          try { await entry.session.abort(); } catch { /* ignore */ }
+          entry.unsubscribe();
+          activeSessions.delete(sessionId);
+        }
+        return;
+      }
+      // Abort all active sessions (backward compatibility)
       for (const [, { session }] of activeSessions) {
         try {
           await session.abort();

@@ -1,4 +1,4 @@
-import type { TransportEvent, TransportEventHandler, TransportEventType } from '@pi/types';
+import type { TransportEventHandler, TransportEventType } from '@pi/types';
 
 export interface TransportRequest {
   id: string;

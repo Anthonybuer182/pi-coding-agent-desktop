@@ -128,8 +128,8 @@ function refreshConfiguredProviders(modelRegistry: ModelRegistry): Set<string> {
   return providers;
 }
 
-export function createRealConfigService(cwd: string, agentDir?: string, modelRegistry?: ModelRegistry): ConfigService {
-  const settings = SettingsManager.create(cwd, agentDir);
+export function createRealConfigService(cwd: string, agentDir?: string, modelRegistry?: ModelRegistry, settingsManager?: SettingsManager): ConfigService {
+  const settings = settingsManager ?? SettingsManager.create(cwd, agentDir);
   const registry = modelRegistry ?? ModelRegistry.create(AuthStorage.inMemory());
 
   // Determine which providers have usable auth (mutable after models.json writes)

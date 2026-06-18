@@ -16,8 +16,7 @@ files:
 # Native .node addons inside @earendil-works/pi-coding-agent must be unpacked
 # from the asar archive so they can be loaded by Node at runtime.
 asarUnpack:
-  - "node_modules/@mariozechner/**/*"
-  - "node_modules/@earendil-works/pi-tui/**/*"
+  - "node_modules/@earendil-works/pi-coding-agent/**/*"
 
 mac:
   category: public.app-category.developer-tools

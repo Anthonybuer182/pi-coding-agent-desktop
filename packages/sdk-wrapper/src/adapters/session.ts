@@ -32,7 +32,7 @@ function toSession(info: SessionInfo): Session {
   return {
     id: info.path,
     workspaceId: info.cwd,
-    title: info.name || info.firstMessage.slice(0, 60) || 'Untitled',
+    title: info.name || (info.firstMessage ? info.firstMessage.slice(0, 60) : undefined) || 'Untitled',
     status: 'active',
     messageCount: info.messageCount,
     lastMessageAt: info.modified.toISOString(),

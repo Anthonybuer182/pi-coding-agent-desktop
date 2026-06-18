@@ -1,5 +1,5 @@
 import { ipcMain, dialog, app } from 'electron';
-import { ModelRegistry, AuthStorage } from '@earendil-works/pi-coding-agent';
+import { ModelRegistry, AuthStorage, SettingsManager } from '@earendil-works/pi-coding-agent';
 import {
   createRealWorkspaceService,
   createRealSessionService,
@@ -31,11 +31,14 @@ export function registerIpcHandlers(): void {
   // the app bundle (unlike process.cwd() in packaged builds).
   const defaultCwd = app.getPath('home');
 
+  // Shared SettingsManager so shell path configuration is consistent
+  const settingsManager = SettingsManager.create(defaultCwd);
+
   workspaceService = createRealWorkspaceService();
   sessionService = createRealSessionService();
   fileService = createRealFileService();
-  configService = createRealConfigService(defaultCwd, undefined, sharedModelRegistry);
-  chatService = createRealChatService(defaultCwd, sharedModelRegistry);
+  configService = createRealConfigService(defaultCwd, undefined, sharedModelRegistry, settingsManager);
+  chatService = createRealChatService(defaultCwd, sharedModelRegistry, settingsManager);
 
   // ── Standard request/response ──
   ipcMain.handle('pi:sdk:request', async (_event, request: SdkRequest) => {

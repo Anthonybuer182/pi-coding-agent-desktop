@@ -206,11 +206,17 @@ async function loadAdapters(server: ViteDevServer) {
   adaptersModule = await server.ssrLoadModule('@pi/sdk-wrapper/adapters');
 
   const cwd = process.cwd();
+
+  // Shared SettingsManager so shell path configuration is consistent.
+  // Dynamic SSR import avoids adding @earendil-works/pi-coding-agent as a web dependency.
+  const sdkModule = await server.ssrLoadModule('@earendil-works/pi-coding-agent');
+  const settingsManager = sdkModule.SettingsManager.create(cwd);
+
   workspaceService = adaptersModule.createRealWorkspaceService();
   sessionService = adaptersModule.createRealSessionService();
-  chatService = adaptersModule.createRealChatService(cwd);
+  chatService = adaptersModule.createRealChatService(cwd, undefined, settingsManager);
   fileService = adaptersModule.createRealFileService();
-  configService = adaptersModule.createRealConfigService(cwd);
+  configService = adaptersModule.createRealConfigService(cwd, undefined, undefined, settingsManager);
 }
 
 async function handleRequest(server: ViteDevServer, method: string, params: any): Promise<any> {

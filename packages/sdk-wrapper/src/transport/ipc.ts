@@ -62,6 +62,7 @@ export class IPCTransport implements Transport {
 
     return new Promise<void>((resolve, reject) => {
       let settled = false;
+      let onAbort: (() => void) | undefined;
 
       const chunkHandler = (data: any) => {
         if (data?.type === 'done') {
@@ -79,6 +80,9 @@ export class IPCTransport implements Transport {
 
       const cleanup = () => {
         ipc.removeListener(chunkChannel, chunkHandler as (...args: unknown[]) => void);
+        if (signal && onAbort) {
+          signal.removeEventListener('abort', onAbort);
+        }
       };
 
       // Listen for real-time chunks from main process
@@ -112,7 +116,7 @@ export class IPCTransport implements Transport {
           }
           return;
         }
-        const onAbort = () => {
+        onAbort = () => {
           ipc.invoke('pi:sdk:stream:abort', { streamId }).catch(() => {});
           cleanup();
           if (!settled) {

@@ -60,7 +60,7 @@ export const useUIStore = create<UIState>()(
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
       setRightPanelWidth: (width) => set({ rightPanelWidth: width }),
-      setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab as 'preview' | 'settings' }),
+      setRightPanelTab: (tab) => set({ rightPanelActiveTab: tab === 'settings' ? 'settings' : 'preview' }),
       setCompactMode: (compact) => set({ compactMode: compact }),
       toggleSkill: (skillId) =>
         set((s) => ({
