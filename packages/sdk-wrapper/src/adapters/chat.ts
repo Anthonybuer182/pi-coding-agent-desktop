@@ -13,7 +13,7 @@ import type { AgentSession } from '@earendil-works/pi-coding-agent';
  * For new sessions, creates via SessionManager.create().
  */
 export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry, settingsManager?: SettingsManager): ChatService {
-  const activeSessions = new Map<string, { session: AgentSession; unsubscribe: () => void; cwd: string }>();
+  const activeSessions = new Map<string, { session: AgentSession; unsubscribe: () => void; cwd: string; skills?: string[] }>();
   // Track last message end time per session for thinking time calculation
   const sessionTimings = new Map<string, number>();
 
@@ -159,8 +159,12 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       files.push({ absPath, relPath, size: stat.size, mimeType: getMimeType(absPath) });
     };
 
-    // Known file-writing tools: extract path from args
-    const WRITE_TOOLS = new Set(['write', 'write_to_file', 'Write', 'mcp__filesystem__write_file']);
+    // Known file-writing/editing tools: extract path from args (precise, no regex)
+    const WRITE_TOOLS = new Set([
+      'write', 'write_to_file', 'Write',
+      'Edit', 'mcp__filesystem__edit_file',
+      'mcp__filesystem__write_file',
+    ]);
     if (WRITE_TOOLS.has(toolName) && args) {
       const filePath = (args as any).path || (args as any).filePath || (args as any).file_path;
       if (filePath && typeof filePath === 'string') {
@@ -169,11 +173,14 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       }
     }
 
-    // For other tools (Bash, officecli, etc.): parse result text for resolved file paths
+    // For other tools (Bash, etc.): parse result text for file paths.
+    // Only match paths with explicit file-creation context (not any whitespace)
+    // to avoid picking up filenames from ls output, build logs, or error messages.
+    // Uses the 'u' flag for Unicode filename support (Chinese, etc.).
     if (resultText && cwd) {
-      // First alt: simple paths without spaces (most filenames, relative or absolute)
-      // Second alt: absolute paths that may contain spaces (start with /)
-      const pathPattern = /(?<=^|\s|at\s+|to\s+|:\s*)([\w\-./]+\.\w{2,6}|\/[\w\-./\\ ]+\.\w{2,6})\b/g;
+      const creationPrefix = '(?:^|created[:,]?\\s+|created\\s+at\\s+|saved\\s+(?:to\\s+)?|written\\s+(?:to\\s+)?|generated[:,]?\\s+|wrote[:,]?\\s+|exported[:,]?\\s+|:\\s*|已生成\\S*\\s*[：:]\\s*|生成\\S*\\s*[：:]\\s*)';
+      const pathPart = '[\\p{L}\\w\\-./]+\\.\\w{2,6}|\\/[\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}';
+      const pathPattern = new RegExp(`(?<=${creationPrefix})(${pathPart})\\b`, 'giu');
       let match;
       while ((match = pathPattern.exec(resultText)) !== null) {
         tryAdd(match[1].trim());
@@ -183,13 +190,24 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
     return files;
   }
 
-  async function createResourceLoader(workCwd: string) {
+  async function createResourceLoader(workCwd: string, selectedSkillIds?: string[]) {
     const resourceLoader = new DefaultResourceLoader({
       cwd: workCwd,
       agentDir: getAgentDir(),
       appendSystemPrompt: [
         'You are equipped with vision capabilities. When users attach images or when the read tool loads image files, analyze the visual content directly. This includes: screenshots of code/errors, UI designs, architecture diagrams, charts, photos, and any other images the user shares. Describe what you see clearly and use it to provide better coding assistance.',
       ],
+      skillsOverride: selectedSkillIds
+        ? (base) => {
+            const enabledNames = new Set(
+              selectedSkillIds.map((id) => id.startsWith('skill-') ? id.slice(6) : id),
+            );
+            return {
+              skills: base.skills.filter((s) => enabledNames.has(s.name)),
+              diagnostics: base.diagnostics,
+            };
+          }
+        : undefined,
     });
     await resourceLoader.reload();
     return resourceLoader;
@@ -198,20 +216,26 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
   async function getOrCreateAgentSession(
     sessionId?: string,
     workspaceCwd?: string,
+    skills?: string[],
   ): Promise<AgentSession> {
     const key = sessionId || 'default';
     const workCwd = workspaceCwd || cwd;
 
     // If a cached session exists, return it directly unless the caller provided
     // an explicit workspaceCwd that differs from the session's cwd (e.g. user
-    // switched workspaces).  steer/followUp/navigateTree don't pass workspaceCwd,
-    // so they safely reuse the existing session.
+    // switched workspaces) or skills changed. steer/followUp/navigateTree don't
+    // pass workspaceCwd or skills, so they safely reuse the existing session.
     const cached = activeSessions.get(key);
     if (cached) {
-      if (!workspaceCwd || cached.cwd === workspaceCwd) {
+      const skillsChanged = skills && !cached.skills
+        ? true
+        : skills && cached.skills
+          ? skills.length !== cached.skills.length || !skills.every((s) => cached.skills!.includes(s))
+          : false;
+      if ((!workspaceCwd || cached.cwd === workspaceCwd) && !skillsChanged) {
         return cached.session;
       }
-      // cwd mismatch — tear down the old session and create a new one
+      // cwd or skills mismatch — tear down the old session and create a new one
       cached.unsubscribe();
       activeSessions.delete(key);
     }
@@ -229,7 +253,7 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       cwd: workCwd,
       sessionManager,
       modelRegistry: registry, // share registry so custom models are visible
-      resourceLoader: await createResourceLoader(workCwd),
+      resourceLoader: await createResourceLoader(workCwd, skills),
       settingsManager,         // share settings so shell path is respected
     });
 
@@ -237,13 +261,13 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       // Events are handled at the call site level
     });
 
-    activeSessions.set(key, { session, unsubscribe, cwd: workCwd });
+    activeSessions.set(key, { session, unsubscribe, cwd: workCwd, skills });
     return session;
   }
 
   return {
     async sendMessage(params: SendMessageParams): Promise<Message> {
-      const session = await getOrCreateAgentSession(params.sessionId, params.workspaceCwd);
+      const session = await getOrCreateAgentSession(params.sessionId, params.workspaceCwd, params.skills);
 
       try {
         // Switch to the requested model if specified
@@ -265,9 +289,6 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
               }))
           : undefined;
         await session.prompt(params.content, images?.length ? { images } : undefined);
-      } catch (err) {
-        throw new Error(err instanceof Error ? err.message : 'Failed to send message');
-      }
 
       // Get session stats for cost/usage on the returned message
       let totalUsage: TokenUsage | undefined;
@@ -297,6 +318,9 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       };
 
       return asstMsg;
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : 'Failed to send message');
+      }
     },
 
     async sendMessageStream(
@@ -304,7 +328,7 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       onChunk: (chunk: StreamChunk) => void,
       signal?: AbortSignal,
     ): Promise<Message> {
-      const session = await getOrCreateAgentSession(params.sessionId, params.workspaceCwd);
+      const session = await getOrCreateAgentSession(params.sessionId, params.workspaceCwd, params.skills);
       const sessionKey = params.sessionId || 'default';
       const workspaceCwd = params.workspaceCwd;
 

@@ -88,6 +88,17 @@ function getConfiguredModelProviders(): Set<string> {
 
 // models.json helpers
 
+function getModelsJsonModelIds(): Set<string> {
+  const config = readModelsConfig();
+  const ids = new Set<string>();
+  for (const provider of Object.values(config.providers)) {
+    for (const model of provider.models) {
+      ids.add(model.id);
+    }
+  }
+  return ids;
+}
+
 function getModelsJsonPath(): string {
   return join(getAgentDir(), 'models.json');
 }
@@ -143,11 +154,12 @@ export function createRealConfigService(cwd: string, agentDir?: string, modelReg
 
       let rawDefaultModelId = settings.getDefaultModel() || merged.defaultModel || 'claude-sonnet-4';
 
-      // Validate: only keep the default model if it's actually available (has configured auth)
+      // Validate: only keep the default model if it's in models.json AND has configured auth
+      const configuredModelIds = getModelsJsonModelIds();
       const availableModels = registry.getAvailable();
-      if (rawDefaultModelId && availableModels.length > 0 &&
-          !availableModels.some((m) => m.id === rawDefaultModelId)) {
-        rawDefaultModelId = availableModels[0].id;
+      const validModels = availableModels.filter((m) => configuredModelIds.has(m.id));
+      if (rawDefaultModelId && !validModels.some((m) => m.id === rawDefaultModelId)) {
+        rawDefaultModelId = validModels[0]?.id ?? '';
       }
 
       return {
@@ -179,8 +191,10 @@ export function createRealConfigService(cwd: string, agentDir?: string, modelReg
     async listModels(): Promise<ModelInfo[]> {
       // Refresh from disk so listModels and getModelsConfig stay in sync
       configuredProviders = refreshConfiguredProviders(registry);
+      // Only return models that are explicitly configured in models.json
+      const configuredModelIds = getModelsJsonModelIds();
       const models = registry.getAll().filter((m) =>
-        configuredProviders.has(m.provider),
+        configuredProviders.has(m.provider) && configuredModelIds.has(m.id),
       );
       return models.map((m) => ({
         id: m.id,

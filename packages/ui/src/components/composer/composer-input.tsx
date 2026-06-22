@@ -281,9 +281,7 @@ export function ComposerInput({
 
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        if (value.trim()) {
-          onSubmit();
-        }
+        onSubmit();
       }
       if (e.key === 'Escape') {
         onSlashDismiss?.();

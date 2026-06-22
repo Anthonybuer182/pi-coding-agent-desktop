@@ -9,6 +9,8 @@ export interface SendMessageParams {
   workspaceCwd?: string;
   /** Queue the message as a steer or follow-up while the agent is working */
   streamingBehavior?: StreamingBehavior;
+  /** Skill IDs (e.g., 'skill-officecli') that should be enabled for this message. Filters skills loaded by the resource loader. */
+  skills?: string[];
 }
 
 export interface StreamChunk {

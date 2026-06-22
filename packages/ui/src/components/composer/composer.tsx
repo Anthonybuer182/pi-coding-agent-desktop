@@ -279,6 +279,8 @@ export function Composer() {
 
   // Store last user message for potential retry
   const lastUserMessageRef = useRef<string>('');
+  // Captured attachments so mutationFn can read them even after clearAttachments()
+  const capturedAttachmentsRef = useRef<typeof pendingAttachments>([]);
 
   const sendMutation = useMutation({
     onMutate: async (content: string) => {
@@ -286,6 +288,7 @@ export function Composer() {
       // clearAttachments() synchronously after mutate(), and the await
       // in cancelQueries yields control allowing clearAttachments to run.
       const currentAttachments = useComposerStore.getState().pendingAttachments;
+      capturedAttachmentsRef.current = currentAttachments;
 
       // Cancel outgoing refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['session', activeSessionId] });
@@ -423,7 +426,7 @@ export function Composer() {
 
       // Build prompt text: decode and include text-based file contents,
       // append references for binary files
-      const currentAttachments = useComposerStore.getState().pendingAttachments;
+      const currentAttachments = capturedAttachmentsRef.current;
       const nonImageAtts = currentAttachments.filter((a) => a.type !== 'image' && a.name);
       let promptContent = content;
       if (nonImageAtts.length > 0) {
@@ -498,6 +501,7 @@ export function Composer() {
           workspaceCwd: activeWorkspaceId ?? undefined,
           modelId: config?.defaultModelId,
           attachments: imageAttachments.length > 0 ? imageAttachments : undefined,
+          skills: selectedSkills,
         },
         (chunk) => {
           if (chunk.type === 'message_start') {
@@ -780,7 +784,7 @@ export function Composer() {
   );
 
   const handleSubmit = useCallback(() => {
-    if (!value.trim() || !activeSessionId || sendMutation.isPending) return;
+    if ((!value.trim() && pendingAttachments.length === 0) || !activeSessionId || sendMutation.isPending) return;
 
     // Intercept built-in slash commands before sending to LLM
     const slashHandled = handleSlashCommand(value);
@@ -792,8 +796,7 @@ export function Composer() {
 
     sendMutation.mutate(value);
     setValue('');
-    // Don't clear attachments here — mutationFn needs them.
-    // clearAttachments() is called in onSettled after the send completes.
+    clearAttachments();
   }, [value, activeSessionId, sendMutation, setValue, handleSlashCommand]);
 
   const handleSlashDetect = useCallback(
@@ -1050,7 +1053,7 @@ export function Composer() {
         ) : (
           <SendButton
             onClick={handleSubmit}
-            disabled={!value.trim() || !activeSessionId}
+            disabled={(!value.trim() && pendingAttachments.length === 0) || !activeSessionId}
             isLoading={sendMutation.isPending}
           />
         )}

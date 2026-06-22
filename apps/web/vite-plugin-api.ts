@@ -202,7 +202,6 @@ let fileService: any;
 let configService: any;
 
 async function loadAdapters(server: ViteDevServer) {
-  if (adaptersModule) return;
   adaptersModule = await server.ssrLoadModule('@pi/sdk-wrapper/adapters');
 
   const cwd = process.cwd();

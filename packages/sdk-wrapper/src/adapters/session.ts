@@ -92,11 +92,12 @@ function detectFilesFromResult(
   const files: Array<{ absPath: string; size: number; mimeType: string }> = [];
   if (!resultText || !cwd) return files;
 
-  // Match file paths in patterns like "Created at /path/file.ext", "saved to /path/file.ext", etc.
-  // Also matches relative paths like "Created: test.pptx"
-  // First alt: simple paths without spaces (most filenames, relative or absolute)
-  // Second alt: absolute paths that may contain spaces (start with /)
-  const pathPattern = /(?<=^|\s|at\s+|to\s+|:\s*)([\w\-./]+\.\w{2,6}|\/[\w\-./\\ ]+\.\w{2,6})\b/g;
+  // Only match paths with explicit file-creation context (not any whitespace)
+  // to avoid picking up filenames from ls output, build logs, or error messages.
+  // Uses the 'u' flag for Unicode filename support (Chinese, etc.).
+  const creationPrefix = '(?:^|created[:,]?\\s+|created\\s+at\\s+|saved\\s+(?:to\\s+)?|written\\s+(?:to\\s+)?|generated[:,]?\\s+|wrote[:,]?\\s+|exported[:,]?\\s+|:\\s*|已生成\\S*\\s*[：:]\\s*|生成\\S*\\s*[：:]\\s*)';
+  const pathPart = '[\\p{L}\\w\\-./]+\\.\\w{2,6}|\\/[\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}';
+  const pathPattern = new RegExp(`(?<=${creationPrefix})(${pathPart})\\b`, 'giu');
   let match;
   while ((match = pathPattern.exec(resultText)) !== null) {
     const raw = match[1].trim();

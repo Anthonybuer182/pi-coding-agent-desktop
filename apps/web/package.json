@@ -10,6 +10,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.78.1",
     "@pi/types": "workspace:*",
     "@pi/sdk-wrapper": "workspace:*",
     "@pi/ui": "workspace:*",
