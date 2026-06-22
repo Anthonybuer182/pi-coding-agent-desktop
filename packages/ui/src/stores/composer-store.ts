@@ -30,18 +30,12 @@ interface ComposerState {
   /** Whether to trigger a smooth scroll to bottom in Virtuoso (incremented per request) */
   scrollToBottomTrigger: number;
 
-  /** Steering and follow-up message queues */
+  /** Steering and follow-up message queues (synced from SDK queue_update events) */
   steeringQueue: string[];
   followUpQueue: string[];
 
-  /** Enqueue a follow-up message to be sent after the current stream completes */
-  enqueueFollowUp: (text: string) => void;
-  /** Enqueue a steering message to be sent at the next tool turn boundary */
-  enqueueSteer: (text: string) => void;
-  /** Remove a queued item by type and index */
+  /** Remove a queued item by type and index (visual-only, SDK queue unaffected) */
   removeQueuedItem: (type: 'steer' | 'followUp', index: number) => void;
-  /** Dequeue and return the next item (steer first, then follow-up). Returns null if empty. */
-  dequeueNext: () => string | null;
 
   setValue: (value: string) => void;
   setCursorPosition: (pos: number) => void;
@@ -164,8 +158,6 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
   clearEditingMessage: () =>
     set({ editingEntryId: null, editingMessageId: null, editingContent: '' }),
   setQueues: (steering, followUp) => set({ steeringQueue: steering, followUpQueue: followUp }),
-  enqueueFollowUp: (text) => set((s) => ({ followUpQueue: [...s.followUpQueue, text] })),
-  enqueueSteer: (text) => set((s) => ({ steeringQueue: [...s.steeringQueue, text] })),
   removeQueuedItem: (type, index) =>
     set((s) => {
       if (type === 'steer') {
@@ -173,20 +165,6 @@ export const useComposerStore = create<ComposerState>((set, get) => ({
       }
       return { followUpQueue: s.followUpQueue.filter((_, i) => i !== index) };
     }),
-  dequeueNext: (): string | null => {
-    const state = get();
-    if (state.steeringQueue.length > 0) {
-      const first = state.steeringQueue[0];
-      set({ steeringQueue: state.steeringQueue.slice(1) });
-      return first;
-    }
-    if (state.followUpQueue.length > 0) {
-      const first = state.followUpQueue[0];
-      set({ followUpQueue: state.followUpQueue.slice(1) });
-      return first;
-    }
-    return null;
-  },
   reset: () =>
     set({
       value: '',

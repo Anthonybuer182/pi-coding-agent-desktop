@@ -71,12 +71,7 @@ export function Composer() {
     setStreamError,
     triggerSend,
     clearEditingMessage,
-    steeringQueue,
-    followUpQueue,
     setQueues,
-    enqueueFollowUp,
-    enqueueSteer,
-    dequeueNext,
     triggerScrollToBottom,
   } = useComposerStore();
 
@@ -92,6 +87,11 @@ export function Composer() {
 
   // Version counter to force ComposerInput refocus after file picker closes
   const [focusVersion, setFocusVersion] = useState(0);
+
+  // Tracks actual streaming state synchronously (avoids React state lag).
+  // Used by handleSteerSubmit to fallback to a regular submit when the stream
+  // has ended but React hasn't re-rendered yet.
+  const isActuallyStreaming = useRef(false);
 
   // Config for model/think level
   const { data: config } = useQuery({
@@ -249,22 +249,9 @@ export function Composer() {
       await sdk.chat.stopGeneration(activeSessionId);
     } finally {
       setIsStreaming(false);
+      isActuallyStreaming.current = false;
     }
   }, [sdk, activeSessionId, setIsStreaming]);
-
-  /** Send the current composer text as a steering message — queued locally, sent later */
-  const handleSteerSubmit = useCallback(() => {
-    if (!value.trim() || !activeSessionId || !isStreaming) return;
-    enqueueSteer(value);
-    setValue('');
-  }, [value, activeSessionId, isStreaming, enqueueSteer, setValue]);
-
-  /** Send the current composer text as a follow-up message — queued locally, sent later */
-  const handleFollowUpSubmit = useCallback(() => {
-    if (!value.trim() || !activeSessionId || !isStreaming) return;
-    enqueueFollowUp(value);
-    setValue('');
-  }, [value, activeSessionId, isStreaming, enqueueFollowUp, setValue]);
 
   // Watch for retry trigger from ChatTimeline
   useEffect(() => {
@@ -411,6 +398,7 @@ export function Composer() {
       setSessionStats(null);
       setStreamError(null);
       setIsStreaming(true);
+      isActuallyStreaming.current = true;
 
       // If editing a message, navigate the tree first to branch from the edited entry
       const editEntryId = useComposerStore.getState().editingEntryId;
@@ -420,6 +408,7 @@ export function Composer() {
         } catch (err) {
           setStreamError(err instanceof Error ? err.message : 'Failed to navigate tree');
           setIsStreaming(false);
+          isActuallyStreaming.current = false;
           throw err;
         }
       }
@@ -540,8 +529,8 @@ export function Composer() {
       }
 
       // Promote the streaming data into the query cache as a single assistant message.
-      // Each stream produces exactly one assistant response, since follow-ups/steers
-      // are now sent via separate sendMutation.mutate() calls.
+      // Steers and follow-ups are sent directly via sdk.chat.steer()/followUp() during
+      // streaming, which the SDK injects at tool-turn boundaries / after completion.
       // Note: file blocks are rendered at the end by renderBlocks() in message-bubble,
       // so no manual reordering is needed here.
       const blocks = state.streamingBlocks.map((b) => {
@@ -581,6 +570,7 @@ export function Composer() {
 
       clearStreamingBlocks();
       setIsStreaming(false);
+      isActuallyStreaming.current = false;
       queryClient.invalidateQueries({ queryKey: ['files'] });
 
       // Auto-preview the last generated file in the right panel
@@ -612,11 +602,9 @@ export function Composer() {
         }
       }
 
-      // Drain queue: send next queued item as a new message
-      const nextText = useComposerStore.getState().dequeueNext();
-      if (nextText) {
-        sendMutateRef.current(nextText);
-      }
+      // Drain queue: removed — steer/followUp are now sent directly via
+      // sdk.chat.steer()/sdk.chat.followUp() and processed by the SDK's
+      // internal queue. The SDK emits queue_update events that sync the UI.
     },
     onError: (error: Error, _content: string, context: any) => {
       // Rollback optimistic user message
@@ -626,16 +614,7 @@ export function Composer() {
       setStreamError(error.message || 'Failed to send message');
       clearStreamingBlocks();
       setIsStreaming(false);
-
-      // Drain queue for non-fatal errors
-      const isFatal = error.message?.toLowerCase().includes('session') &&
-                      error.message?.toLowerCase().includes('not found');
-      if (!isFatal) {
-        const nextText = useComposerStore.getState().dequeueNext();
-        if (nextText) {
-          sendMutateRef.current(nextText);
-        }
-      }
+      isActuallyStreaming.current = false;
     },
     onSettled: () => {
       // Clear attachments after mutation completes (success or error),
@@ -643,10 +622,6 @@ export function Composer() {
       useComposerStore.getState().clearAttachments();
     },
   });
-
-  // Stable ref for sendMutation.mutate to avoid stale closure issues in callbacks
-  const sendMutateRef = useRef(sendMutation.mutate);
-  sendMutateRef.current = sendMutation.mutate;
 
   /** Handle built-in slash commands locally without sending to LLM */
   const handleSlashCommand = useCallback(
@@ -798,6 +773,47 @@ export function Composer() {
     setValue('');
     clearAttachments();
   }, [value, activeSessionId, sendMutation, setValue, handleSlashCommand]);
+
+  /** Queue a steering message via the SDK. It will be delivered after the
+   *  current assistant turn's tool calls complete, redirecting the agent.
+   *  If the stream has already ended (fast model, no tool calls), fall back
+   *  to a regular submit so the message isn't silently lost. */
+  const handleSteerSubmit = useCallback(() => {
+    if (!value.trim() || !activeSessionId) return;
+    if (isActuallyStreaming.current) {
+      sdk.chat.steer(activeSessionId, value).catch((err) => {
+        console.error('[Steer] Failed to steer:', err);
+        // If steer fails while actually streaming, fall back to regular submit
+        if (!isActuallyStreaming.current) {
+          useComposerStore.getState().setTriggerSend(value);
+        }
+      });
+    } else {
+      // Agent has already finished — send as a regular message
+      handleSubmit();
+      return;
+    }
+    setValue('');
+  }, [value, activeSessionId, sdk, setValue, handleSubmit]);
+
+  /** Queue a follow-up message via the SDK. It will be delivered after the
+   *  agent finishes all work (all tool calls and steering messages processed).
+   *  If the stream has already ended, fall back to a regular submit. */
+  const handleFollowUpSubmit = useCallback(() => {
+    if (!value.trim() || !activeSessionId) return;
+    if (isActuallyStreaming.current) {
+      sdk.chat.followUp(activeSessionId, value).catch((err) => {
+        console.error('[FollowUp] Failed to follow up:', err);
+        if (!isActuallyStreaming.current) {
+          useComposerStore.getState().setTriggerSend(value);
+        }
+      });
+    } else {
+      handleSubmit();
+      return;
+    }
+    setValue('');
+  }, [value, activeSessionId, sdk, setValue, handleSubmit]);
 
   const handleSlashDetect = useCallback(
     (query: string) => {
