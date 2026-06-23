@@ -12,6 +12,16 @@
 - **模型配置** — 支持多种 AI 提供商和模型选择，可自定义思考等级
 - **斜杠命令** — 支持 `/help`、`/clear`、`/compact`、`/model`、`/config`、`/bash`、`/file` 等命令
 
+## 功能演示
+
+<video src="./assets/demo.mp4" width="100%" controls muted autoplay loop></video>
+
+![Chat View](./assets/chat-view.png)
+
+![File Preview](./assets/file-preview.png)
+
+![Provider Settings](./assets/settings-view.png)
+
 ## 技术栈
 
 | 类别 | 技术 |
