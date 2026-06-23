@@ -15,6 +15,16 @@ function encodeSessionDir(cwd: string): string {
 }
 
 /**
+ * Normalize a workspace path to a consistent format, matching the SDK's
+ * internal resolvePath() behaviour. This strips trailing slashes, resolves
+ * relative segments, and ensures an absolute path — so that `/foo/bar/`
+ * and `/foo/bar` are treated as the same workspace.
+ */
+function normalizeWorkspacePath(p: string): string {
+  return resolve(p);
+}
+
+/**
  * Attempt to decode a session directory name back to a filesystem path.
  * The SDK encoding replaces `/`, `\`, `:` with `-`, so decoding is lossy.
  * We verify the result with existsSync() to filter out bad decodes.
@@ -50,7 +60,7 @@ export function createRealWorkspaceService(): WorkspaceService {
         const allSessions = await SessionManager.listAll();
 
         for (const session of allSessions) {
-          const cwd = session.cwd;
+          const cwd = session.cwd ? normalizeWorkspacePath(session.cwd) : '';
           if (!cwd) continue;
 
           const existing = workspaceMap.get(cwd);
@@ -89,13 +99,14 @@ export function createRealWorkspaceService(): WorkspaceService {
             try {
               const raw = readFileSync(metaPath, 'utf-8');
               const meta = JSON.parse(raw);
-              if (!meta.path || workspaceMap.has(meta.path)) continue;
-              if (!existsSync(meta.path)) continue;
+              const cwd = meta.path ? normalizeWorkspacePath(meta.path) : '';
+              if (!cwd || workspaceMap.has(cwd)) continue;
+              if (!existsSync(cwd)) continue;
               const stat = statSync(metaPath);
-              workspaceMap.set(meta.path, {
-                id: meta.path,
-                name: meta.name || basename(meta.path),
-                path: meta.path,
+              workspaceMap.set(cwd, {
+                id: cwd,
+                name: meta.name || basename(cwd),
+                path: cwd,
                 type: 'local',
                 sessionCount: 0,
                 createdAt: meta.createdAt || stat.birthtime.toISOString(),
@@ -127,7 +138,8 @@ export function createRealWorkspaceService(): WorkspaceService {
               if (files.some(f => f.endsWith('.jsonl'))) continue;
             } catch { continue; }
             // Try to decode directory name
-            const cwd = decodeSessionDir(entry.name);
+            const candidate = decodeSessionDir(entry.name);
+            const cwd = candidate ? normalizeWorkspacePath(candidate) : null;
             if (!cwd || workspaceMap.has(cwd)) continue;
             const stat = statSync(dirPath);
             workspaceMap.set(cwd, {
@@ -149,15 +161,16 @@ export function createRealWorkspaceService(): WorkspaceService {
     },
 
     async get(id: string): Promise<Workspace> {
+      const normalized = normalizeWorkspacePath(id);
       try {
-        const sessions = await SessionManager.list(id);
+        const sessions = await SessionManager.list(normalized);
         if (sessions.length > 0) {
           const latest = sessions.reduce((max, s) =>
             s.modified > max.modified ? s : max, sessions[0]);
           return {
-            id,
-            name: basename(id),
-            path: id,
+            id: normalized,
+            name: basename(normalized),
+            path: normalized,
             type: 'local',
             sessionCount: sessions.length,
             createdAt: sessions[0].created.toISOString(),
@@ -169,15 +182,15 @@ export function createRealWorkspaceService(): WorkspaceService {
       }
 
       // Check workspace.json for metadata-only workspaces
-      const sessionDir = encodeSessionDir(id);
+      const sessionDir = encodeSessionDir(normalized);
       const metaPath = join(sessionDir, 'workspace.json');
       if (existsSync(metaPath)) {
         const meta = JSON.parse(readFileSync(metaPath, 'utf-8'));
         const stat = statSync(metaPath);
         return {
-          id,
-          name: meta.name || basename(id),
-          path: id,
+          id: normalized,
+          name: meta.name || basename(normalized),
+          path: normalized,
           type: 'local',
           sessionCount: 0,
           createdAt: meta.createdAt || stat.birthtime.toISOString(),
@@ -192,21 +205,22 @@ export function createRealWorkspaceService(): WorkspaceService {
       // Write workspace metadata so list() can discover it even before
       // any session is created (SessionManager doesn't write .jsonl until
       // the first assistant message)
-      const sessionDir = encodeSessionDir(path);
+      const normalized = normalizeWorkspacePath(path);
+      const sessionDir = encodeSessionDir(normalized);
       if (!existsSync(sessionDir)) {
         mkdirSync(sessionDir, { recursive: true });
       }
       const workspaceMeta = {
         name,
-        path,
+        path: normalized,
         createdAt: new Date().toISOString(),
       };
       writeFileSync(join(sessionDir, 'workspace.json'), JSON.stringify(workspaceMeta));
 
       return {
-        id: path,
+        id: normalized,
         name,
-        path,
+        path: normalized,
         type: 'local',
         sessionCount: 0,
         createdAt: workspaceMeta.createdAt,
@@ -215,14 +229,15 @@ export function createRealWorkspaceService(): WorkspaceService {
     },
 
     async delete(id: string): Promise<void> {
-      const sessionDir = encodeSessionDir(id);
+      const normalized = normalizeWorkspacePath(id);
+      const sessionDir = encodeSessionDir(normalized);
       if (existsSync(sessionDir)) {
         rmSync(sessionDir, { recursive: true, force: true });
       }
     },
 
     async update(id: string, data: Partial<Pick<Workspace, 'name'>>): Promise<Workspace> {
-      return this.get(id).then((ws) => ({ ...ws, ...data }));
+      return this.get(normalizeWorkspacePath(id)).then((ws) => ({ ...ws, ...data }));
     },
   };
 }

@@ -201,9 +201,9 @@ export function Composer() {
   });
 
   const { data: sessions } = useQuery({
-    queryKey: ['sessions', activeSessionId],
-    queryFn: () => (activeSessionId ? sdk.session.list(activeSessionId) : []),
-    enabled: !!activeSessionId,
+    queryKey: ['sessions', activeWorkspaceId],
+    queryFn: () => (activeWorkspaceId ? sdk.session.list(activeWorkspaceId) : []),
+    enabled: !!activeWorkspaceId,
   });
 
   // Fetch workspace files for @ mention autocomplete

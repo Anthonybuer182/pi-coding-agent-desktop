@@ -27,6 +27,7 @@ export function SessionList() {
       return sdk.session.list(activeWorkspaceId);
     },
     enabled: !!activeWorkspaceId,
+    refetchInterval: 5000,
   });
 
   const workspaceName = workspaces?.find((w) => w.id === activeWorkspaceId)?.name ?? 'Sessions';
