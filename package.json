@@ -2,6 +2,18 @@
   "name": "pi-coding-agent-desktop",
   "private": true,
   "packageManager": "pnpm@9.15.4",
+  "keywords": [
+    "ai",
+    "coding-assistant",
+    "electron",
+    "react",
+    "desktop-app",
+    "ai-programming"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Anthonybuer182/pi-coding-agent-desktop.git"
+  },
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
