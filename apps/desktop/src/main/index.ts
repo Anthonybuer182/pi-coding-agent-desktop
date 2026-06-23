@@ -2,6 +2,9 @@ import { app, BrowserWindow } from 'electron';
 import { createMainWindow } from '@main/window-manager';
 import { registerIpcHandlers } from '@main/ipc/index';
 import { registerNativeIpcHandlers } from '@main/ipc/native';
+import { SettingsManager } from '@earendil-works/pi-coding-agent';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -18,8 +21,17 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    // Create SettingsManager early so we can inject bundled shell on Windows
+    // before any session creates its tool configuration.
+    const settingsManager = SettingsManager.create(app.getPath('home'));
+
+    // On Windows, detect and inject the bundled MinGit BusyBox shell.
+    // This allows the AI agent's bash tool to work immediately without
+    // requiring the user to install Git for Windows.
+    injectBundledShell(settingsManager);
+
     mainWindow = createMainWindow();
-    registerIpcHandlers();
+    registerIpcHandlers(settingsManager);
     registerNativeIpcHandlers();
 
     app.on('activate', () => {
@@ -35,3 +47,64 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+/**
+ * On Windows, detect the bundled MinGit BusyBox environment (shipped as
+ * extraResources) and configure SettingsManager to use it.
+ *
+ * MinGit BusyBox provides:
+ *   - ash.exe (BusyBox POSIX shell)      → set as shellPath
+ *   - busybox.exe (coreutils: ls, cat…)  → added to PATH
+ *   - git.exe                            → added to PATH
+ *
+ * This is a no-op on macOS and Linux, where the OS ships a shell natively.
+ */
+function injectBundledShell(settingsManager: SettingsManager): void {
+  if (process.platform !== 'win32') return;
+
+  // process.resourcesPath → app's resources directory.
+  // The bundled shell is at resources/bash-bundle/ (from extraResources).
+  const bundleRoot = join(process.resourcesPath, 'bash-bundle');
+
+  // MinGit BusyBox doesn't include bash.exe — it has ash.exe (BusyBox
+  // Almquist shell) which supports POSIX shell syntax with "-c" flag.
+  // Search for bash.exe first (preferred), then ash.exe.
+  const shellNames = ['bash.exe', 'ash.exe'];
+  const binDirs = ['mingw64/bin', 'bin', 'usr/bin'].map((d) => join(bundleRoot, d));
+
+  let shellPath: string | null = null;
+  for (const dir of binDirs) {
+    for (const name of shellNames) {
+      const p = join(dir, name);
+      if (existsSync(p)) { shellPath = p; break; }
+    }
+    if (shellPath) break;
+  }
+
+  if (!shellPath) {
+    // Bundled shell not found. SDK will fall back to searching for Git
+    // Bash on the system, then show a clear error if nothing is found.
+    return;
+  }
+
+  settingsManager.setShellPath(shellPath);
+
+  // Add bundled bin dirs to PATH so git, busybox utilities, and msys-2.0.dll
+  // can be found. On MSYS2, Windows paths are mapped as:
+  //   C:\foo\bar → /c/foo/bar
+  const pathDirs = [
+    join(bundleRoot, 'mingw64', 'bin'),
+    join(bundleRoot, 'usr', 'bin'),
+    join(bundleRoot, 'cmd'),
+    join(bundleRoot, 'bin'),
+  ].filter((p) => existsSync(p));
+
+  if (pathDirs.length > 0) {
+    const unixPaths = pathDirs.map((p) =>
+      '/' + p.replace(/^([A-Z]):/i, (_, d) => d.toLowerCase()).replace(/\\/g, '/'),
+    );
+    settingsManager.setShellCommandPrefix(
+      `export PATH="${unixPaths.join(':')}:$PATH"`,
+    );
+  }
+}

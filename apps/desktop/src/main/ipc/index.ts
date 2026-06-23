@@ -23,16 +23,13 @@ interface SdkRequest {
   params: unknown;
 }
 
-export function registerIpcHandlers(): void {
+export function registerIpcHandlers(settingsManager: SettingsManager): void {
   // Shared ModelRegistry so config writes refresh chat's visible model list
   const sharedModelRegistry = ModelRegistry.create(AuthStorage.inMemory());
 
   // app.getPath('home') is stable across platforms and never points inside
   // the app bundle (unlike process.cwd() in packaged builds).
   const defaultCwd = app.getPath('home');
-
-  // Shared SettingsManager so shell path configuration is consistent
-  const settingsManager = SettingsManager.create(defaultCwd);
 
   workspaceService = createRealWorkspaceService();
   sessionService = createRealSessionService();

@@ -33,3 +33,6 @@ pnpm-debug.log*
 !apps/desktop/build/icon.icns
 # Claude
 .claude/
+# Bash bundle (downloaded during Windows build)
+bash-bundle/
+MinGit*

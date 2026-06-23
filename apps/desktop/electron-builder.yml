@@ -1,5 +1,8 @@
 appId: com.pi.coding-agent
 productName: Pi Coding Agent
+# Skip native module rebuild — pnpm workspace compat.
+npmRebuild: false
+
 directories:
   buildResources: build
   output: release
@@ -31,6 +34,11 @@ mac:
   # entitlementsInherit: build/entitlements.mac.plist
 
 win:
+  # Bundle MinGit BusyBox (shell + git + coreutils) so Windows users
+  # get bash-like command execution out of the box.
+  extraResources:
+    - from: "bash-bundle/"
+      to: "bash-bundle/"
   target:
     - target: nsis
       arch:
