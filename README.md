@@ -14,13 +14,7 @@
 
 ## 功能演示
 
-<video src="./assets/demo.mp4" width="100%" controls muted autoplay loop></video>
-
-![Chat View](./assets/chat-view.png)
-
-![File Preview](./assets/file-preview.png)
-
-![Provider Settings](./assets/settings-view.png)
+![Demo](./assets/demo.gif)
 
 ## 技术栈
 
