@@ -93,6 +93,11 @@ export function Composer() {
   // has ended but React hasn't re-rendered yet.
   const isActuallyStreaming = useRef(false);
 
+  // AbortController for clean cancellation of streaming via AbortSignal.
+  // Causes the proxy to return a dummy message (not throw), so onSuccess
+  // fires instead of onError, preserving the user message in the chat.
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // Config for model/think level
   const { data: config } = useQuery({
     queryKey: ['config'],
@@ -102,6 +107,12 @@ export function Composer() {
   const updateConfigMut = useMutation({
     mutationFn: (data: Partial<Config>) => sdk.config.update(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['config'] }),
+  });
+
+  // Available models for /model slash command
+  const { data: availableModels } = useQuery({
+    queryKey: ['models'],
+    queryFn: () => sdk.config.listModels(),
   });
 
   const handleFilesSelected = useCallback(
@@ -243,14 +254,15 @@ export function Composer() {
     return items;
   }, [workspaces, sessions, workspaceFiles]);
 
-  const handleStopGeneration = useCallback(async () => {
+  const handleStopGeneration = useCallback(() => {
     if (!activeSessionId) return;
-    try {
-      await sdk.chat.stopGeneration(activeSessionId);
-    } finally {
-      setIsStreaming(false);
-      isActuallyStreaming.current = false;
-    }
+    // Trigger clean cancellation via AbortSignal → proxy returns dummy msg → onSuccess fires
+    abortControllerRef.current?.abort();
+    // Fire-and-forget server-side cleanup (don't block UI)
+    sdk.chat.stopGeneration(activeSessionId).catch(() => {});
+    // Instant UI feedback: hide Stop button, show Send button
+    setIsStreaming(false);
+    isActuallyStreaming.current = false;
   }, [sdk, activeSessionId, setIsStreaming]);
 
   // Watch for retry trigger from ChatTimeline
@@ -271,6 +283,7 @@ export function Composer() {
 
   const sendMutation = useMutation({
     onMutate: async (content: string) => {
+      abortControllerRef.current = new AbortController();
       // Capture attachments BEFORE the await, since handleSubmit calls
       // clearAttachments() synchronously after mutate(), and the await
       // in cancelQueries yields control allowing clearAttachments to run.
@@ -519,6 +532,7 @@ export function Composer() {
             setStreamError(chunk.error || 'An unknown error occurred');
           }
         },
+        abortControllerRef.current?.signal,
       );
     },
     onSuccess: () => {
@@ -608,6 +622,13 @@ export function Composer() {
       // internal queue. The SDK emits queue_update events that sync the UI.
     },
     onError: (error: Error, _content: string, context: any) => {
+      // User-initiated cancel via Stop button: don't rollback, don't show error
+      if (error.name === 'AbortError') {
+        clearStreamingBlocks();
+        setIsStreaming(false);
+        isActuallyStreaming.current = false;
+        return;
+      }
       // Rollback optimistic user message
       if (context?.previousSession) {
         queryClient.setQueryData(['session', activeSessionId], context.previousSession);
@@ -743,7 +764,35 @@ export function Composer() {
         return true;
       }
 
-      // /bash, /file, /compact, /model — pass through to LLM
+      if (cmdName === '/model') {
+        const currentModelId = config?.defaultModelId ?? 'Not set';
+        const modelLines = ['## Available Models', ''];
+        if (availableModels && availableModels.length > 0) {
+          for (const m of availableModels) {
+            const marker = m.id === currentModelId ? ' (current)' : '';
+            const status = m.isAvailable ? '' : ' [unavailable]';
+            modelLines.push(`- **${m.name}**${marker}${status}`);
+          }
+        } else {
+          modelLines.push('_(loading models...)_');
+        }
+        modelLines.push('', `Current: **${currentModelId}**`);
+
+        insertPair({
+          id: `model-${Date.now()}`,
+          sessionId: activeSessionId,
+          role: 'assistant',
+          status: 'complete',
+          modelId: config?.defaultModelId ?? 'system',
+          content: modelLines.join('\n'),
+          blocks: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+        return true;
+      }
+
+      // /bash, /file, /compact — pass through to LLM
       return false;
     },
     [
@@ -751,6 +800,7 @@ export function Composer() {
       activeSessionId,
       activeWorkspaceId,
       config,
+      availableModels,
       compactMode,
       selectedSkills,
       queryClient,

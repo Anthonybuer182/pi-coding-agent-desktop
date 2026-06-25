@@ -121,6 +121,9 @@ export function ChatTimeline() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   // Stable timestamp captured once when streaming begins
   const streamingStartRef = useRef<string>('');
+  // Track last scrollToBottomTrigger to avoid duplicate scrolls when
+  // chatItems.length also changes (the effect watches both values).
+  const lastScrollTriggerRef = useRef(0);
 
   const { data: session, isLoading, error, refetch } = useQuery({
     queryKey: ['session', activeSessionId],
@@ -130,17 +133,6 @@ export function ChatTimeline() {
   });
 
   const storedMessages = session?.messages ?? [];
-
-  // Scroll to bottom when a slash command inserts a message via setQueryData
-  // or when the composer triggers a manual scroll (e.g. after optimistic update)
-  useEffect(() => {
-    if (scrollToBottomTrigger > 0 && virtuosoRef.current && chatItems.length > 0) {
-      virtuosoRef.current.scrollToIndex({
-        index: chatItems.length - 1,
-        align: 'end',
-      });
-    }
-  }, [scrollToBottomTrigger]);
 
   // Stable timestamp: capture once at the start of streaming
   if (isStreaming && !streamingStartRef.current) {
@@ -179,6 +171,39 @@ export function ChatTimeline() {
   }, [isStreaming, messages.length]);
 
   const chatItems = useMemo(() => addDateSeparators(messages), [messages]);
+
+  // Scroll to bottom when a slash command inserts a message via setQueryData
+  // or when the composer triggers a manual scroll (e.g. after optimistic update).
+  // Watches BOTH scrollToBottomTrigger AND chatItems.length so that if the
+  // trigger fires before React Query propagates the cache update, the scroll
+  // is retried once chatItems reflects the new message count.
+  // Directly manipulates the Virtuoso scroller DOM element because Virtuoso's
+  // API methods (scrollTo, autoscrollToBottom) may be ignored during internal
+  // state recalculation triggered by data changes.
+  useEffect(() => {
+    const triggerChanged = scrollToBottomTrigger !== lastScrollTriggerRef.current;
+    lastScrollTriggerRef.current = scrollToBottomTrigger;
+
+    if (scrollToBottomTrigger > 0 && triggerChanged && chatItems.length > 0) {
+      // Multiple scroll attempts at increasing delays to overcome Virtuoso's
+      // internal scroll-position restoration that occurs after data changes.
+      const attempt = (delay: number) => {
+        setTimeout(() => {
+          const scrollers = document.querySelectorAll('[data-virtuoso-scroller]');
+          // Chat scroller is the one with scrollHeight > 1000 (the sidebar one is smaller)
+          for (const scroller of scrollers) {
+            if (scroller.scrollHeight > 1000) {
+              scroller.scrollTop = scroller.scrollHeight;
+              break;
+            }
+          }
+        }, delay);
+      };
+      attempt(0);
+      attempt(50);
+      attempt(150);
+    }
+  }, [scrollToBottomTrigger, chatItems.length]);
 
   // When switching sessions, scroll to the bottom before the browser paints
   // so the user never sees the list flash at the top.
