@@ -149,6 +149,8 @@ async function handleChat(action: string, params: unknown): Promise<unknown> {
       return chatService.followUp(p.sessionId as string, p.content as string, p.images as any);
     case 'navigateTree':
       return chatService.navigateTree(p.sessionId as string, p.entryId as string, p.options as any);
+    case 'compact':
+      return chatService.compact(p.sessionId as string, p.customInstructions as string | undefined);
     default: throw new Error(`Unknown chat action: ${action}`);
   }
 }

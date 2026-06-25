@@ -797,5 +797,10 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
       const result = await session.navigateTree(entryId, options);
       return { editorText: result.editorText, cancelled: result.cancelled };
     },
+
+    async compact(sessionId: string, customInstructions?: string) {
+      const session = await getOrCreateAgentSession(sessionId);
+      return session.compact(customInstructions);
+    },
   };
 }

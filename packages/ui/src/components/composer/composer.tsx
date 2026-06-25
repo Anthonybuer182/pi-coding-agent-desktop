@@ -792,7 +792,36 @@ export function Composer() {
         return true;
       }
 
-      // /bash, /file, /compact — pass through to LLM
+      if (cmdName === '/compact') {
+        // Insert a transient "Compacting..." message that will be replaced on completion
+        const compactAckId = `compact-ack-${Date.now()}`;
+        const compactMsg = {
+          id: compactAckId,
+          sessionId: activeSessionId,
+          role: 'assistant' as const,
+          status: 'complete' as const,
+          modelId: 'system',
+          content: [
+            '## Compacting Conversation Context',
+            '',
+            'Summarizing conversation history to reduce token usage while preserving key context...',
+          ].join('\n'),
+          blocks: [],
+          createdAt: now,
+          updatedAt: now,
+        };
+        queryClient.setQueryData(['session', activeSessionId], (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: [...(old.messages || []), compactMsg],
+          };
+        });
+        triggerScrollToBottom();
+        return true;
+      }
+
+      // /bash, /file — pass through to LLM
       return false;
     },
     [
@@ -812,6 +841,75 @@ export function Composer() {
   const handleSubmit = useCallback(() => {
     if ((!value.trim() && pendingAttachments.length === 0) || !activeSessionId || sendMutation.isPending) return;
 
+    const trimmed = value.trim();
+
+    // /compact: handle entirely client-side with SDK compaction
+    if (trimmed.startsWith('/compact')) {
+      // Insert user message BEFORE the acknowledgment so order is correct
+      const now = new Date().toISOString();
+      const userMsg = {
+        id: `compact-user-${Date.now()}`,
+        sessionId: activeSessionId,
+        role: 'user' as const,
+        status: 'complete' as const,
+        content: trimmed,
+        blocks: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      queryClient.setQueryData(['session', activeSessionId], (old: any) => {
+        if (!old) return old;
+        return { ...old, messages: [...(old.messages || []), userMsg] };
+      });
+      // Now insert the "Compacting..." acknowledgment (after user message)
+      handleSlashCommand(value);
+      setValue('');
+      clearAttachments();
+      triggerScrollToBottom();
+
+      sdk.chat.compact(activeSessionId).then((result) => {
+        queryClient.setQueryData(['session', activeSessionId], (old: any) => {
+          if (!old) return old;
+          const messages = (old.messages || []).map((m: any) => {
+            if (m.id.startsWith('compact-ack-')) {
+              return {
+                ...m,
+                content: [
+                  '## Conversation Compacted',
+                  '',
+                  result.summary,
+                  '',
+                  '---',
+                  `**Tokens before compaction:** ${result.tokensBefore.toLocaleString()}`,
+                ].join('\n'),
+              };
+            }
+            return m;
+          });
+          return { ...old, messages };
+        });
+      }).catch((err: Error) => {
+        const msg = err.message || 'Unknown error';
+        const isAlreadyCompacted = msg.toLowerCase().includes('already compacted');
+        queryClient.setQueryData(['session', activeSessionId], (old: any) => {
+          if (!old) return old;
+          const messages = (old.messages || []).map((m: any) => {
+            if (m.id.startsWith('compact-ack-')) {
+              return {
+                ...m,
+                content: isAlreadyCompacted
+                  ? '**Session already compacted.** The conversation has already been summarized. No additional compaction is needed.'
+                  : `**Compaction failed:** ${msg}`,
+              };
+            }
+            return m;
+          });
+          return { ...old, messages };
+        });
+      });
+      return;
+    }
+
     // Intercept built-in slash commands before sending to LLM
     const slashHandled = handleSlashCommand(value);
     if (slashHandled) {
@@ -823,7 +921,7 @@ export function Composer() {
     sendMutation.mutate(value);
     setValue('');
     clearAttachments();
-  }, [value, activeSessionId, sendMutation, setValue, handleSlashCommand]);
+  }, [value, activeSessionId, sendMutation, setValue, handleSlashCommand, sdk, queryClient, triggerScrollToBottom]);
 
   /** Queue a steering message via the SDK. It will be delivered after the
    *  current assistant turn's tool calls complete, redirecting the agent.
@@ -876,11 +974,20 @@ export function Composer() {
 
   const handleMentionDetect = useCallback(
     (query: string) => {
+      // Only show menu when there are actual matches; otherwise Enter key
+      // gets intercepted for empty-menu selection and the message won't send.
+      const hasMatch = mentionItems.some(
+        (i) => !query || i.label.toLowerCase().includes(query.toLowerCase()),
+      );
+      if (!hasMatch) {
+        setShowMentionMenu(false);
+        return;
+      }
       setHighlightedMentionIndex(0);
       setShowMentionMenu(true, query);
       setShowSlashMenu(false);
     },
-    [setShowMentionMenu, setShowSlashMenu],
+    [setShowMentionMenu, setShowSlashMenu, mentionItems],
   );
 
   const handleSlashDismiss = useCallback(() => {
@@ -932,7 +1039,7 @@ export function Composer() {
       // cmd.name already includes the / prefix (e.g. "/help")
       const tokenText = cmd.name;
       const withoutSlash = value.replace(/\/(\w*)$/, '');
-      setValue(`${withoutSlash}${tokenText}`);
+      setValue(`${withoutSlash}${tokenText}\u00A0`);
       pendingTokenInsert.current = { text: tokenText, type: 'slash' };
       setShowSlashMenu(false);
       setHighlightedSlashIndex(0);
@@ -963,8 +1070,7 @@ export function Composer() {
       }
       const withoutMention = value.replace(/@([^\s]*)$/, '');
       const tokenText = `@${item.label}`;
-      setValue(`${withoutMention}${tokenText}`);
-      pendingTokenInsert.current = { text: tokenText, type: 'mention' };
+      setValue(`${withoutMention}${tokenText}\u00A0`);
       setShowMentionMenu(false);
       setHighlightedMentionIndex(0);
       setTokenInsertVersion((v) => v + 1);

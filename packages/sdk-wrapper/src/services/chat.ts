@@ -43,6 +43,14 @@ export interface NavigateTreeResult {
   cancelled: boolean;
 }
 
+/** Result of a session compaction operation */
+export interface CompactResult {
+  summary: string;
+  firstKeptEntryId: string;
+  tokensBefore: number;
+  details?: unknown;
+}
+
 export interface ChatService {
   sendMessage(params: SendMessageParams): Promise<Message>;
   sendMessageStream(
@@ -71,4 +79,11 @@ export interface ChatService {
    * @param options - Navigation options (summarize, label, etc.)
    */
   navigateTree(sessionId: string, entryId: string, options?: NavigateTreeOptions): Promise<NavigateTreeResult>;
+  /**
+   * Compacts the conversation context to reduce token usage.
+   * Summarizes older messages while preserving key context and decisions.
+   * @param sessionId - Session ID
+   * @param customInstructions - Optional custom instructions for the summary
+   */
+  compact(sessionId: string, customInstructions?: string): Promise<CompactResult>;
 }
