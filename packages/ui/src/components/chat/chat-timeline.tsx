@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useCallback, useEffect } from 'react';
+import { useRef, useMemo, useState, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { ArrowDown, AlertTriangle, RefreshCw, MessageSquare } from 'lucide-react';
@@ -132,9 +132,13 @@ export function ChatTimeline() {
   const storedMessages = session?.messages ?? [];
 
   // Scroll to bottom when a slash command inserts a message via setQueryData
+  // or when the composer triggers a manual scroll (e.g. after optimistic update)
   useEffect(() => {
-    if (scrollToBottomTrigger > 0 && virtuosoRef.current && messages.length > 0) {
-      virtuosoRef.current.scrollToIndex(messages.length - 1);
+    if (scrollToBottomTrigger > 0 && virtuosoRef.current && chatItems.length > 0) {
+      virtuosoRef.current.scrollToIndex({
+        index: chatItems.length - 1,
+        align: 'end',
+      });
     }
   }, [scrollToBottomTrigger]);
 
@@ -155,7 +159,37 @@ export function ChatTimeline() {
     return storedMessages;
   }, [storedMessages, isStreaming, streamingBlocks]);
 
+  // When streaming starts, the optimistic user message and StreamingIndicator
+  // Footer (~40px) are added to Virtuoso's scrollHeight AFTER followOutput's
+  // 300 ms smooth scroll has already started, causing the animation to land
+  // ~40 px above the true bottom.  Wait for the smooth scroll animation to
+  // finish, then force-scroll to the absolute bottom to compensate.
+  const prevIsStreamingRef = useRef(isStreaming);
+  useEffect(() => {
+    if (isStreaming && !prevIsStreamingRef.current && virtuosoRef.current && messages.length > 0) {
+      const timer = setTimeout(() => {
+        virtuosoRef.current?.scrollTo({
+          top: Number.MAX_SAFE_INTEGER,
+          behavior: 'auto',
+        });
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+    prevIsStreamingRef.current = isStreaming;
+  }, [isStreaming, messages.length]);
+
   const chatItems = useMemo(() => addDateSeparators(messages), [messages]);
+
+  // When switching sessions, scroll to the bottom before the browser paints
+  // so the user never sees the list flash at the top.
+  useLayoutEffect(() => {
+    if (!isLoading && session && chatItems.length > 0 && !isStreaming) {
+      virtuosoRef.current?.scrollToIndex({
+        index: chatItems.length - 1,
+        align: 'end',
+      });
+    }
+  }, [isLoading, session?.id]);
 
   const lastMessage = messages[messages.length - 1];
   const showStreamingIndicator =
@@ -208,7 +242,10 @@ export function ChatTimeline() {
 
   // Scroll to bottom
   const scrollToBottom = () => {
-    virtuosoRef.current?.scrollToIndex(messages.length - 1);
+    virtuosoRef.current?.scrollToIndex({
+      index: chatItems.length - 1,
+      align: 'end',
+    });
   };
 
   // ----- Error loading session -----
@@ -255,6 +292,7 @@ export function ChatTimeline() {
 
       <div className="flex-1">
         <Virtuoso
+          key={session?.id}
           ref={virtuosoRef}
           data={chatItems}
           followOutput="smooth"

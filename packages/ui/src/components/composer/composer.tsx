@@ -388,6 +388,7 @@ export function Composer() {
           ],
         };
       });
+
       return { previousSession, promptContent };
     },
     mutationFn: async (content: string) => {
