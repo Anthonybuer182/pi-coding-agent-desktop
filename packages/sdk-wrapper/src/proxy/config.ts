@@ -13,6 +13,9 @@ export function createProxyConfigService(transport: Transport): ConfigService {
     async listModels() {
       return transport.request('config.listModels') as ReturnType<ConfigService['listModels']>;
     },
+    async listSkills() {
+      return transport.request('config.listSkills') as ReturnType<ConfigService['listSkills']>;
+    },
     // models.json CRUD
     async getModelsConfig() {
       return transport.request('config.getModelsConfig') as Promise<ModelsConfig>;

@@ -172,6 +172,7 @@ async function handleConfig(action: string, params: unknown): Promise<unknown> {
     case 'get': return configService.get();
     case 'update': return configService.update(p.data as any);
     case 'listModels': return configService.listModels();
+    case 'listSkills': return configService.listSkills();
     case 'getModelsConfig': return configService.getModelsConfig();
     case 'saveModelsConfig': return configService.saveModelsConfig(p.config as any);
     case 'upsertProvider': return configService.upsertProvider(p.name as string, p.provider as any);

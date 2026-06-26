@@ -1,9 +1,11 @@
-import type { Config, ModelInfo, ModelsConfig, ProviderEntry, ModelEntry } from '@pi/types';
+import type { Config, ModelInfo, ModelsConfig, ProviderEntry, ModelEntry, Skill } from '@pi/types';
 
 export interface ConfigService {
   get(): Promise<Config>;
   update(data: Partial<Config>): Promise<Config>;
   listModels(): Promise<ModelInfo[]>;
+  /** List available skills discovered from disk by the SDK */
+  listSkills(): Promise<Skill[]>;
   /** Read full models.json configuration */
   getModelsConfig(): Promise<ModelsConfig>;
   /** Write full models.json configuration */

@@ -49,7 +49,7 @@ export const useUIStore = create<UIState>()(
       rightPanelWidth: 600,
       rightPanelActiveTab: 'preview',
       compactMode: false,
-      selectedSkills: ['skill-officecli', 'skill-filesystem'],
+      selectedSkills: [],
       connectionStatus: 'connecting',
       searchQuery: '',
       memoryPreviews: {},

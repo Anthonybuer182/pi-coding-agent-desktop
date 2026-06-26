@@ -58,6 +58,7 @@ export function SkillSelector({ skills, selectedIds, onToggle, disabled }: Skill
             </Badge>
           )}
           <span className="hidden lg:inline">Skills</span>
+          <span className="text-muted-foreground text-[10px]">({skills.length})</span>
           <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>

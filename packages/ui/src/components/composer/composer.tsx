@@ -24,13 +24,6 @@ import { DEFAULT_SLASH_COMMANDS } from '@pi/sdk-wrapper';
 import type { ContentBlock, Config, Skill } from '@pi/types';
 import type { Attachment } from '@pi/types';
 
-const DEFAULT_SKILLS: Skill[] = [
-  { id: 'skill-filesystem', name: 'filesystem', description: 'Access and manage local files', category: 'filesystem', enabled: true },
-  { id: 'skill-officecli', name: 'officecli', description: 'Create and edit Office documents', category: 'document', enabled: true },
-  { id: 'skill-graphify', name: 'graphify', description: 'Build knowledge graphs from code', category: 'code', enabled: true },
-  { id: 'skill-ui-ux-pro-max', name: 'ui-ux-pro-max', description: 'UI/UX design intelligence', category: 'code', enabled: true },
-];
-
 export function Composer() {
   const sdk = useSDK();
   const queryClient = useQueryClient();
@@ -113,6 +106,12 @@ export function Composer() {
   const { data: availableModels } = useQuery({
     queryKey: ['models'],
     queryFn: () => sdk.config.listModels(),
+  });
+
+  // Available skills loaded dynamically from SDK
+  const { data: availableSkills } = useQuery({
+    queryKey: ['skills'],
+    queryFn: () => sdk.config.listSkills(),
   });
 
   const handleFilesSelected = useCallback(
@@ -687,8 +686,8 @@ export function Composer() {
           ...DEFAULT_SLASH_COMMANDS.map((c) => `- **${c.name}** — ${c.description}`),
           '',
           '## Skills',
-          ...DEFAULT_SKILLS.map((s) =>
-            `- **${s.name}** — ${s.description} (${s.enabled ? 'enabled' : 'disabled'})`,
+          ...(availableSkills ?? []).map((s) =>
+            `- **${s.name}** — ${s.description} (${selectedSkills.includes(s.id) ? 'enabled' : 'disabled'})`,
           ),
           '',
           '## Keyboard Shortcuts',
@@ -736,7 +735,7 @@ export function Composer() {
       }
 
       if (cmdName === '/config') {
-        const skills = DEFAULT_SKILLS
+        const skills = (availableSkills ?? [])
           .filter((s) => selectedSkills.includes(s.id))
           .map((s) => s.name)
           .join(', ') || 'none';
@@ -830,6 +829,7 @@ export function Composer() {
       activeWorkspaceId,
       config,
       availableModels,
+      availableSkills,
       compactMode,
       selectedSkills,
       queryClient,
@@ -1193,7 +1193,7 @@ export function Composer() {
         />
         <div className="h-4 w-px bg-border mx-1" />
         <SkillSelector
-          skills={DEFAULT_SKILLS}
+          skills={availableSkills ?? []}
           selectedIds={selectedSkills}
           onToggle={toggleSkill}
         />

@@ -276,6 +276,7 @@ async function handleRequest(server: ViteDevServer, method: string, params: any)
         case 'get': return configService.get();
         case 'update': return configService.update(params.data);
         case 'listModels': return configService.listModels();
+        case 'listSkills': return configService.listSkills();
         case 'getModelsConfig': return configService.getModelsConfig();
         case 'saveModelsConfig': return configService.saveModelsConfig(params.config);
         case 'upsertProvider': return configService.upsertProvider(params.name as string, params.provider as any);

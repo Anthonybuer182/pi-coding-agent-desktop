@@ -1,8 +1,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
+import { homedir } from 'os';
 import type { ConfigService } from '../services/config.js';
-import { SettingsManager, AuthStorage, ModelRegistry, getAgentDir } from '@earendil-works/pi-coding-agent';
-import type { Config, ModelInfo, ModelProvider, ModelsConfig, ProviderEntry, ModelEntry } from '@pi/types';
+import { SettingsManager, AuthStorage, ModelRegistry, getAgentDir, loadSkills } from '@earendil-works/pi-coding-agent';
+import type { Skill as SdkSkill } from '@earendil-works/pi-coding-agent';
+import type { Config, ModelInfo, ModelProvider, ModelsConfig, ProviderEntry, ModelEntry, Skill } from '@pi/types';
 
 // Map real SDK thinking levels to our Config thinking levels
 function toConfigThinkLevel(level?: string): Config['defaultThinkLevel'] {
@@ -142,6 +144,7 @@ function refreshConfiguredProviders(modelRegistry: ModelRegistry): Set<string> {
 export function createRealConfigService(cwd: string, agentDir?: string, modelRegistry?: ModelRegistry, settingsManager?: SettingsManager): ConfigService {
   const settings = settingsManager ?? SettingsManager.create(cwd, agentDir);
   const registry = modelRegistry ?? ModelRegistry.create(AuthStorage.inMemory());
+  const resolvedAgentDir = agentDir || getAgentDir();
 
   // Determine which providers have usable auth (mutable after models.json writes)
   let configuredProviders = getConfiguredModelProviders();
@@ -204,6 +207,28 @@ export function createRealConfigService(cwd: string, agentDir?: string, modelReg
         thinkLevels: m.reasoning ? toThinkLevels(m.thinkingLevelMap) : ['off'],
         maxTokens: m.maxTokens,
         isAvailable: true,
+      }));
+    },
+
+    async listSkills(): Promise<Skill[]> {
+      const skillPaths = settings.getSkillPaths();
+      // Include ~/.agents/skills/ which is also scanned by the pi CLI
+      const agentsSkillsDir = join(homedir(), '.agents', 'skills');
+      if (!skillPaths.includes(agentsSkillsDir)) {
+        skillPaths.push(agentsSkillsDir);
+      }
+      const result = loadSkills({
+        cwd,
+        agentDir: resolvedAgentDir,
+        skillPaths,
+        includeDefaults: true,
+      });
+      return result.skills.map((s: SdkSkill) => ({
+        id: `skill-${s.name}`,
+        name: s.name,
+        description: s.description,
+        category: 'custom' as Skill['category'],
+        enabled: true,
       }));
     },
 
