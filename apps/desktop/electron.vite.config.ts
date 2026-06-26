@@ -58,6 +58,9 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': resolve(__dirname, '../../packages/ui/src'),
+        '@pi/ui': resolve(__dirname, '../../packages/ui/src'),
+        '@pi/sdk-wrapper': resolve(__dirname, '../../packages/sdk-wrapper/dist'),
+        '@pi/types': resolve(__dirname, '../../packages/types/dist'),
       },
     },
     plugins: [react()],
