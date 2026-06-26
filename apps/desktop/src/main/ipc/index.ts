@@ -23,7 +23,7 @@ interface SdkRequest {
   params: unknown;
 }
 
-export function registerIpcHandlers(settingsManager: SettingsManager): void {
+export function registerIpcHandlers(settingsManager: SettingsManager, bundledSkillsPath?: string): void {
   // Shared ModelRegistry so config writes refresh chat's visible model list
   const sharedModelRegistry = ModelRegistry.create(AuthStorage.inMemory());
 
@@ -34,7 +34,7 @@ export function registerIpcHandlers(settingsManager: SettingsManager): void {
   workspaceService = createRealWorkspaceService();
   sessionService = createRealSessionService();
   fileService = createRealFileService();
-  configService = createRealConfigService(defaultCwd, undefined, sharedModelRegistry, settingsManager);
+  configService = createRealConfigService(defaultCwd, undefined, sharedModelRegistry, settingsManager, bundledSkillsPath);
   chatService = createRealChatService(defaultCwd, sharedModelRegistry, settingsManager);
 
   // ── Standard request/response ──

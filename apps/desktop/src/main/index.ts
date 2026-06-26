@@ -4,7 +4,8 @@ import { registerIpcHandlers } from '@main/ipc/index';
 import { registerNativeIpcHandlers } from '@main/ipc/native';
 import { SettingsManager } from '@earendil-works/pi-coding-agent';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -20,7 +21,26 @@ if (!gotLock) {
     }
   });
 
-  app.whenReady().then(() => {
+  /**
+ * Resolve the bundled skills directory shipped with the app.
+ *
+ * In production (packaged): <app>/Contents/Resources/skills/  (from extraResources)
+ * In development:         <project>/apps/desktop/skills/
+ *
+ * Returns the path if the directory exists, otherwise undefined.
+ */
+function getBundledSkillsPath(): string | undefined {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+
+  const skillsPath = app.isPackaged
+    ? join(process.resourcesPath, 'skills')
+    : join(__dirname, '..', '..', 'skills');
+
+  return existsSync(skillsPath) ? skillsPath : undefined;
+}
+
+app.whenReady().then(() => {
     // Create SettingsManager early so we can inject bundled shell on Windows
     // before any session creates its tool configuration.
     const settingsManager = SettingsManager.create(app.getPath('home'));
@@ -31,7 +51,7 @@ if (!gotLock) {
     injectBundledShell(settingsManager);
 
     mainWindow = createMainWindow();
-    registerIpcHandlers(settingsManager);
+    registerIpcHandlers(settingsManager, getBundledSkillsPath());
     registerNativeIpcHandlers();
 
     app.on('activate', () => {

@@ -21,6 +21,12 @@ files:
 asarUnpack:
   - "node_modules/@earendil-works/pi-coding-agent/**/*"
 
+# Bundled skills (officecli, skill-creator, etc.) shipped as extraResources
+# so users get them out of the box without installing via CLI.
+extraResources:
+  - from: "skills/"
+    to: "skills/"
+
 mac:
   category: public.app-category.developer-tools
   target:
@@ -36,7 +42,11 @@ mac:
 win:
   # Bundle MinGit BusyBox (shell + git + coreutils) so Windows users
   # get bash-like command execution out of the box.
+  # Note: platform-level extraResources override the top-level list,
+  # so bundled skills must be repeated here.
   extraResources:
+    - from: "skills/"
+      to: "skills/"
     - from: "bash-bundle/"
       to: "bash-bundle/"
   target:

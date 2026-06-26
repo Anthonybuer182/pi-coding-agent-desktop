@@ -141,7 +141,7 @@ function refreshConfiguredProviders(modelRegistry: ModelRegistry): Set<string> {
   return providers;
 }
 
-export function createRealConfigService(cwd: string, agentDir?: string, modelRegistry?: ModelRegistry, settingsManager?: SettingsManager): ConfigService {
+export function createRealConfigService(cwd: string, agentDir?: string, modelRegistry?: ModelRegistry, settingsManager?: SettingsManager, bundledSkillsPath?: string): ConfigService {
   const settings = settingsManager ?? SettingsManager.create(cwd, agentDir);
   const registry = modelRegistry ?? ModelRegistry.create(AuthStorage.inMemory());
   const resolvedAgentDir = agentDir || getAgentDir();
@@ -216,6 +216,11 @@ export function createRealConfigService(cwd: string, agentDir?: string, modelReg
       const agentsSkillsDir = join(homedir(), '.agents', 'skills');
       if (!skillPaths.includes(agentsSkillsDir)) {
         skillPaths.push(agentsSkillsDir);
+      }
+      // Add bundled skills (shipped with the desktop app) last so that
+      // user-installed skills in ~/.agents/skills/ take priority on name collisions.
+      if (bundledSkillsPath && existsSync(bundledSkillsPath) && !skillPaths.includes(bundledSkillsPath)) {
+        skillPaths.push(bundledSkillsPath);
       }
       const result = loadSkills({
         cwd,
