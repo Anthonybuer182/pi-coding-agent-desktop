@@ -2,8 +2,8 @@ import { app, BrowserWindow } from 'electron';
 import { createMainWindow } from '@main/window-manager';
 import { registerIpcHandlers } from '@main/ipc/index';
 import { registerNativeIpcHandlers } from '@main/ipc/native';
-import { SettingsManager } from '@earendil-works/pi-coding-agent';
-import { existsSync } from 'fs';
+import { SettingsManager, getAgentDir } from '@earendil-works/pi-coding-agent';
+import { existsSync, mkdirSync, readdirSync, cpSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -22,36 +22,46 @@ if (!gotLock) {
   });
 
   /**
- * Resolve the bundled skills directory shipped with the app.
- *
- * In production (packaged): <app>/Contents/Resources/skills/  (from extraResources)
- * In development:         <project>/apps/desktop/skills/
- *
- * Returns the path if the directory exists, otherwise undefined.
- */
-function getBundledSkillsPath(): string | undefined {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = dirname(__filename);
+   * On first launch, copy bundled skills from the app's resources into
+   * ~/.pi/agent/skills/ so the pi-coding-agent SDK auto-discovers them.
+   *
+   * Each bundled skill directory is only copied if it doesn't already
+   * exist in the target (won't overwrite user-installed skills).
+   */
+  function migrateSkills(): void {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
 
-  const skillsPath = app.isPackaged
-    ? join(process.resourcesPath, 'skills')
-    : join(__dirname, '..', '..', 'skills');
+    const bundledSource = app.isPackaged
+      ? join(process.resourcesPath, 'skills')
+      : join(__dirname, '..', '..', 'skills');
 
-  return existsSync(skillsPath) ? skillsPath : undefined;
-}
+    if (!existsSync(bundledSource)) return;
 
-app.whenReady().then(() => {
-    // Create SettingsManager early so we can inject bundled shell on Windows
-    // before any session creates its tool configuration.
+    const targetDir = join(getAgentDir(), 'skills');
+    if (!existsSync(targetDir)) {
+      mkdirSync(targetDir, { recursive: true });
+    }
+
+    const bundledDirs = readdirSync(bundledSource, { withFileTypes: true })
+      .filter((d) => d.isDirectory());
+
+    for (const dir of bundledDirs) {
+      const target = join(targetDir, dir.name);
+      if (!existsSync(target)) {
+        cpSync(join(bundledSource, dir.name), target, { recursive: true });
+      }
+    }
+  }
+
+  app.whenReady().then(() => {
     const settingsManager = SettingsManager.create(app.getPath('home'));
 
-    // On Windows, detect and inject the bundled MinGit BusyBox shell.
-    // This allows the AI agent's bash tool to work immediately without
-    // requiring the user to install Git for Windows.
+    migrateSkills();
     injectBundledShell(settingsManager);
 
     mainWindow = createMainWindow();
-    registerIpcHandlers(settingsManager, getBundledSkillsPath());
+    registerIpcHandlers(settingsManager);
     registerNativeIpcHandlers();
 
     app.on('activate', () => {

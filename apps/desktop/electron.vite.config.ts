@@ -13,6 +13,12 @@ export default defineConfig({
     resolve: {
       alias: {
         '@main': resolve(__dirname, 'src/main'),
+        // Resolve workspace packages to their compiled dist so that
+        // electron-vite can bundle them. The dist must be built first
+        // (via `pnpm build` or `turbo build` from the repo root).
+        '@pi/sdk-wrapper': resolve(__dirname, '../../packages/sdk-wrapper/dist'),
+        '@pi/sdk-wrapper/adapters': resolve(__dirname, '../../packages/sdk-wrapper/dist/adapters/index.js'),
+        '@pi/types': resolve(__dirname, '../../packages/types/dist'),
       },
     },
     build: {

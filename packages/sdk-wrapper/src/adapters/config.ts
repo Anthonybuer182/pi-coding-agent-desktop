@@ -141,7 +141,7 @@ function refreshConfiguredProviders(modelRegistry: ModelRegistry): Set<string> {
   return providers;
 }
 
-export function createRealConfigService(cwd: string, agentDir?: string, modelRegistry?: ModelRegistry, settingsManager?: SettingsManager, bundledSkillsPath?: string): ConfigService {
+export function createRealConfigService(cwd: string, agentDir?: string, modelRegistry?: ModelRegistry, settingsManager?: SettingsManager): ConfigService {
   const settings = settingsManager ?? SettingsManager.create(cwd, agentDir);
   const registry = modelRegistry ?? ModelRegistry.create(AuthStorage.inMemory());
   const resolvedAgentDir = agentDir || getAgentDir();
@@ -211,22 +211,41 @@ export function createRealConfigService(cwd: string, agentDir?: string, modelReg
     },
 
     async listSkills(): Promise<Skill[]> {
-      const skillPaths = settings.getSkillPaths();
-      // Include ~/.agents/skills/ which is also scanned by the pi CLI
+      // Build skill path list with correct priority:
+      //   1. ~/.agents/skills/       — user-installed via pi CLI (wins on collision)
+      //   2. Settings skill paths     — any extra path configured by user
+      //   3. ~/.pi/agent/skills/     — bundled skills migrated on first launch (fallback)
+      //   4. <cwd>/.pi/skills/       — project-level skills
+      //
+      // We use includeDefaults: false so we control the scan order.
+      const skillPaths: string[] = [];
+
+      // 1. User-installed skills — highest priority
       const agentsSkillsDir = join(homedir(), '.agents', 'skills');
-      if (!skillPaths.includes(agentsSkillsDir)) {
+      if (existsSync(agentsSkillsDir)) {
         skillPaths.push(agentsSkillsDir);
       }
-      // Add bundled skills (shipped with the desktop app) last so that
-      // user-installed skills in ~/.agents/skills/ take priority on name collisions.
-      if (bundledSkillsPath && existsSync(bundledSkillsPath) && !skillPaths.includes(bundledSkillsPath)) {
-        skillPaths.push(bundledSkillsPath);
+
+      // 2. Settings-configured skill paths
+      skillPaths.push(...settings.getSkillPaths());
+
+      // 3. Agent skills (includes bundled skills after first-launch migration)
+      const agentSkillsDir = join(resolvedAgentDir, 'skills');
+      if (existsSync(agentSkillsDir) && !skillPaths.includes(agentSkillsDir)) {
+        skillPaths.push(agentSkillsDir);
       }
+
+      // 4. Project skills
+      const projectSkillsDir = join(cwd, '.pi', 'skills');
+      if (existsSync(projectSkillsDir) && !skillPaths.includes(projectSkillsDir)) {
+        skillPaths.push(projectSkillsDir);
+      }
+
       const result = loadSkills({
         cwd,
         agentDir: resolvedAgentDir,
         skillPaths,
-        includeDefaults: true,
+        includeDefaults: false,
       });
       return result.skills.map((s: SdkSkill) => ({
         id: `skill-${s.name}`,
