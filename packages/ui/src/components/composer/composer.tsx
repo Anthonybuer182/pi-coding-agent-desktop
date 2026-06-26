@@ -475,6 +475,11 @@ export function Composer() {
         promptContent = `${content}\n\n${fileSections.join('\n\n')}`;
       }
 
+      // Strip @ prefix from file references (e.g. @filename.pptx → filename.pptx)
+      // so the agent resolves actual filesystem paths. Only matches tokens with
+      // a file extension to avoid affecting workspace/session @mentions.
+      promptContent = promptContent.replace(/@([^\s]*?\.[a-zA-Z0-9]{1,10})(?=[^a-zA-Z0-9]|$)/g, '$1');
+
       // Collect image attachments with base64 data read
       const imageAttachments = currentAttachments
         .filter((a) => a.type === 'image' && a.data)
