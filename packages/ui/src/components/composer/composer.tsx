@@ -114,6 +114,16 @@ export function Composer() {
     queryFn: () => sdk.config.listSkills(),
   });
 
+  // Filter stale skill IDs from localStorage against actual available skills
+  const validSelectedSkills = useMemo(
+    () => {
+      if (!availableSkills) return [];
+      const skillIds = new Set(availableSkills.map(s => s.id));
+      return selectedSkills.filter(id => skillIds.has(id));
+    },
+    [selectedSkills, availableSkills],
+  );
+
   const handleFilesSelected = useCallback(
     (files: File[]) => {
       files.forEach((file) => {
@@ -503,7 +513,7 @@ export function Composer() {
           workspaceCwd: activeWorkspaceId ?? undefined,
           modelId: config?.defaultModelId,
           attachments: imageAttachments.length > 0 ? imageAttachments : undefined,
-          skills: selectedSkills,
+          skills: validSelectedSkills,
         },
         (chunk) => {
           if (chunk.type === 'message_start') {
@@ -687,7 +697,7 @@ export function Composer() {
           '',
           '## Skills',
           ...(availableSkills ?? []).map((s) =>
-            `- **${s.name}** — ${s.description} (${selectedSkills.includes(s.id) ? 'enabled' : 'disabled'})`,
+            `- **${s.name}** — ${s.description} (${validSelectedSkills.includes(s.id) ? 'enabled' : 'disabled'})`,
           ),
           '',
           '## Keyboard Shortcuts',
@@ -736,7 +746,7 @@ export function Composer() {
 
       if (cmdName === '/config') {
         const skills = (availableSkills ?? [])
-          .filter((s) => selectedSkills.includes(s.id))
+          .filter((s) => validSelectedSkills.includes(s.id))
           .map((s) => s.name)
           .join(', ') || 'none';
         const configContent = [
@@ -831,7 +841,7 @@ export function Composer() {
       availableModels,
       availableSkills,
       compactMode,
-      selectedSkills,
+      validSelectedSkills,
       queryClient,
       setActiveSession,
       triggerScrollToBottom,
@@ -1194,7 +1204,7 @@ export function Composer() {
         <div className="h-4 w-px bg-border mx-1" />
         <SkillSelector
           skills={availableSkills ?? []}
-          selectedIds={selectedSkills}
+          selectedIds={validSelectedSkills}
           onToggle={toggleSkill}
         />
         <CompactToggle compact={compactMode} onToggle={setCompactMode} />
