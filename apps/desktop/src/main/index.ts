@@ -4,7 +4,7 @@ import { registerIpcHandlers } from '@main/ipc/index';
 import { registerNativeIpcHandlers } from '@main/ipc/native';
 import { SettingsManager, getAgentDir } from '@earendil-works/pi-coding-agent';
 import { existsSync, mkdirSync, readdirSync, cpSync } from 'fs';
-import { exec } from 'child_process';
+import { exec, execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -63,17 +63,20 @@ if (!gotLock) {
     // install.sh is bash-based, macOS/Linux only
     if (process.platform === 'win32') return;
 
-    // If already in PATH, skip; otherwise run install
-    exec(
-      'command -v officecli >/dev/null 2>&1 && exit 0 || curl -fsSL https://d.officecli.ai/install.sh | bash',
-      (error) => {
-        if (error) {
-          console.error('[officecli] Install failed:', error.message);
-          return;
-        }
-        console.log('[officecli] Installed successfully');
-      },
-    );
+    try {
+      execSync('command -v officecli', { stdio: 'ignore' });
+      return; // Already in PATH
+    } catch {
+      // Not installed — download in background
+    }
+
+    exec('curl -fsSL https://d.officecli.ai/install.sh | bash', (error) => {
+      if (error) {
+        console.error('[officecli] Install failed:', error.message);
+        return;
+      }
+      console.log('[officecli] Installed successfully');
+    });
   }
 
   app.whenReady().then(() => {
