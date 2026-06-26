@@ -27,7 +27,7 @@ export function XlsxPreview() {
   if (!activePreviewFilePath) return null;
   if (isLoading) return <LoadingSpinner message="Loading spreadsheet..." />;
 
-  const fileName = activePreviewFilePath.split('/').pop() ?? 'Spreadsheet.xlsx';
+  const fileName = activePreviewFilePath.split(/[/\\]/).pop() ?? 'Spreadsheet.xlsx';
 
   if (error || !data || data.doc.type !== 'xlsx') {
     return (

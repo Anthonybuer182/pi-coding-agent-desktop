@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import type { Workspace } from '@pi/types';
 
 function folderBasename(filePath: string): string {
-  return filePath.split('/').filter(Boolean).pop() || filePath.split('\\').filter(Boolean).pop() || filePath;
+  return filePath.split(/[/\\]/).filter(Boolean).pop() || filePath;
 }
 
 export function WorkspaceCreateButton() {

@@ -121,7 +121,7 @@ export function DocxPreview() {
   if (!activePreviewFilePath) return null;
   if (isLoading) return <LoadingSpinner message="Loading document..." />;
 
-  const fileName = activePreviewFilePath.split('/').pop() ?? 'Document.docx';
+  const fileName = activePreviewFilePath.split(/[/\\]/).pop() ?? 'Document.docx';
 
   if (error || !data || data.doc.type !== 'docx') {
     return (

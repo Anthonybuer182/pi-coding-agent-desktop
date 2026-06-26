@@ -20,6 +20,7 @@ files:
 # from the asar archive so they can be loaded by Node at runtime.
 asarUnpack:
   - "node_modules/@earendil-works/pi-coding-agent/**/*"
+  - "node_modules/@mariozechner/clipboard*/**/*"
 
 # Bundled skills (officecli, skill-creator, etc.) shipped as extraResources
 # so users get them out of the box without installing via CLI.

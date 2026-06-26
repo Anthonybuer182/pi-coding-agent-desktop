@@ -34,7 +34,7 @@ export function HTMLPreview() {
   if (!activePreviewFilePath) return null;
   if (isLoading) return <LoadingSpinner message="Loading HTML..." />;
 
-  const fileName = activePreviewFilePath.split('/').pop() ?? 'HTML Page';
+  const fileName = activePreviewFilePath.split(/[/\\]/).pop() ?? 'HTML Page';
 
   if (mode === 'source') {
     return (

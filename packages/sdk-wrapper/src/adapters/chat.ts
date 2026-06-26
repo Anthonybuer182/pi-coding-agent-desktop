@@ -179,7 +179,7 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
     // Uses the 'u' flag for Unicode filename support (Chinese, etc.).
     if (resultText && cwd) {
       const creationPrefix = '(?:^|created[:,]?\\s+|created\\s+at\\s+|saved\\s+(?:to\\s+)?|written\\s+(?:to\\s+)?|generated[:,]?\\s+|wrote[:,]?\\s+|exported[:,]?\\s+|:\\s*|已生成\\S*\\s*[：:]\\s*|生成\\S*\\s*[：:]\\s*)';
-      const pathPart = '[\\p{L}\\w\\-./]+\\.\\w{2,6}|\\/[\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}';
+      const pathPart = '[\\p{L}\\w\\-./]+\\.\\w{2,6}|\\/[\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}|[A-Za-z]:[/\\\\][\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}';
       const pathPattern = new RegExp(`(?<=${creationPrefix})(${pathPart})\\b`, 'giu');
       let match;
       while ((match = pathPattern.exec(resultText)) !== null) {

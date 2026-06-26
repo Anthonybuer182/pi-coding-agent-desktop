@@ -47,7 +47,7 @@ export function OfficeDocPreview() {
 
   if (isLoading) return <LoadingSpinner message="Loading document..." />;
 
-  const fileName = activePreviewFilePath.split('/').pop() ?? '';
+  const fileName = activePreviewFilePath.split(/[/\\]/).pop() ?? '';
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
   const FileIconComp = getFileIcon(ext);
   const fileType = getFileTypeLabel(ext);

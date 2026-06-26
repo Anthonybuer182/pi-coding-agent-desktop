@@ -135,7 +135,7 @@ function setupApiRoutes(server: ViteDevServer): void {
         }
         await loadAdapters(server);
         const fileBuffer = readFileSync(filePath);
-        const fileName = filePath.split('/').pop() ?? 'download';
+        const fileName = filePath.split(/[/\\]/).pop() ?? 'download';
         const ext = extname(filePath).toLowerCase();
         const mimeTypes: Record<string, string> = {
           '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

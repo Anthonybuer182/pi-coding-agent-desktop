@@ -209,7 +209,7 @@ export function PDFPreview() {
   if (!activePreviewFilePath) return null;
   if (isFileLoading) return <LoadingSpinner message="Loading PDF..." />;
 
-  const fileName = activePreviewFilePath.split('/').pop() ?? 'PDF Document';
+  const fileName = activePreviewFilePath.split(/[/\\]/).pop() ?? 'PDF Document';
 
   if (error) {
     return (

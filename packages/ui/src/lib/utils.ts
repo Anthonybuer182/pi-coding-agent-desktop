@@ -29,7 +29,7 @@ const PREVIEWABLE_EXTENSIONS = new Set([
 
 /** Returns true if the file can be opened and edited as text */
 export function isTextEditableFile(filePath: string): boolean {
-  const name = filePath.split('/').pop() ?? filePath;
+  const name = filePath.split(/[/\\]/).pop() ?? filePath;
   const ext = name.includes('.') ? '.' + name.split('.').pop()?.toLowerCase() : '';
   if (TEXT_EDITABLE_EXTENSIONS.has(ext)) return true;
   // Also handle files without extensions that are commonly text
@@ -39,7 +39,7 @@ export function isTextEditableFile(filePath: string): boolean {
 
 /** Returns true if the file should open in the right panel (text editor or structured preview) */
 export function isPreviewableInRightPanel(filePath: string): boolean {
-  const name = filePath.split('/').pop() ?? filePath;
+  const name = filePath.split(/[/\\]/).pop() ?? filePath;
   const ext = name.includes('.') ? '.' + name.split('.').pop()?.toLowerCase() : '';
   return isTextEditableFile(filePath) || PREVIEWABLE_EXTENSIONS.has(ext);
 }

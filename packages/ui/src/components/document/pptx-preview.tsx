@@ -68,7 +68,7 @@ export function PptxPreview() {
   if (!activePreviewFilePath) return null;
   if (isLoading) return <LoadingSpinner message="Loading presentation..." />;
 
-  const fileName = activePreviewFilePath.split('/').pop() ?? 'Presentation.pptx';
+  const fileName = activePreviewFilePath.split(/[/\\]/).pop() ?? 'Presentation.pptx';
 
   if (error || !data || data.doc.type !== 'pptx') {
     return (

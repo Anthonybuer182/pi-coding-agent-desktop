@@ -52,7 +52,7 @@ export function FileTreeNode({ entry, workspaceId, depth, onFileClick }: FileTre
   // Whether the current directory is an ancestor of the selected file
   const shouldAutoExpand = entry.type === 'directory'
     && !!activePreviewFilePath
-    && activePreviewFilePath.startsWith(entry.path + '/');
+    && (activePreviewFilePath.startsWith(entry.path + '/') || activePreviewFilePath.startsWith(entry.path + '\\'));
 
   // Auto-expand ancestor directory
   useEffect(() => {
