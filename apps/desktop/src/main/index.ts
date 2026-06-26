@@ -4,6 +4,7 @@ import { registerIpcHandlers } from '@main/ipc/index';
 import { registerNativeIpcHandlers } from '@main/ipc/native';
 import { SettingsManager, getAgentDir } from '@earendil-works/pi-coding-agent';
 import { existsSync, mkdirSync, readdirSync, cpSync } from 'fs';
+import { exec } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -54,10 +55,32 @@ if (!gotLock) {
     }
   }
 
+  /**
+   * Pre-install CLI tools required by bundled skills during app startup.
+   * Runs non-blocking: failures are silent (Agent can install on demand).
+   */
+  function ensureSkillBinaries(): void {
+    // install.sh is bash-based, macOS/Linux only
+    if (process.platform === 'win32') return;
+
+    // If already in PATH, skip; otherwise run install
+    exec(
+      'command -v officecli >/dev/null 2>&1 && exit 0 || curl -fsSL https://d.officecli.ai/install.sh | bash',
+      (error) => {
+        if (error) {
+          console.error('[officecli] Install failed:', error.message);
+          return;
+        }
+        console.log('[officecli] Installed successfully');
+      },
+    );
+  }
+
   app.whenReady().then(() => {
     const settingsManager = SettingsManager.create(app.getPath('home'));
 
     migrateSkills();
+    ensureSkillBinaries();
     injectBundledShell(settingsManager);
 
     mainWindow = createMainWindow();
