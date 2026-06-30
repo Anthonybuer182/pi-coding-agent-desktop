@@ -7,19 +7,27 @@ description: Create, analyze, proofread, and modify Office documents (.docx, .xl
 
 AI-friendly CLI for .docx, .xlsx, .pptx. Single binary, no dependencies, no Office installation needed.
 
-## Install
+## Setup (run once per session — REQUIRED before any officecli command)
 
-If `officecli` is not installed:
+The installer only writes PATH to `~/.zshrc`. Non-interactive shells, bash, and sandboxed environments won't pick it up — so always set PATH explicitly first.
 
 ```bash
-# macOS / Linux
-curl -fsSL https://d.officecli.ai/install.sh | bash
-
-# Windows (PowerShell)
-irm https://d.officecli.ai/install.ps1 | iex
+# macOS / Linux — safe to run repeatedly (idempotent)
+export PATH="$HOME/.local/bin:$PATH"
+if ! command -v officecli >/dev/null 2>&1; then
+  curl -fsSL https://d.officecli.ai/install.sh | bash
+fi
+officecli --version
 ```
 
-Verify with `officecli --version`. If still not found after install, open a new terminal.
+```powershell
+# Windows — safe to run repeatedly (idempotent)
+$env:Path += ";$env:LOCALAPPDATA\OfficeCLI"
+if (-not (Test-Path "$env:LOCALAPPDATA\OfficeCLI\officecli.exe")) {
+    irm https://d.officecli.ai/install.ps1 | iex
+}
+officecli --version
+```
 
 ---
 
