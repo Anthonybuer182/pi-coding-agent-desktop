@@ -10,7 +10,7 @@
 - **文件浏览** — 内置文件树，支持文件浏览和管理
 - **文档预览** — 支持代码高亮、Markdown、PDF、Office 文档（.docx/.xlsx/.pptx）等格式预览
 - **模型配置** — 支持多种 AI 提供商和模型选择，可自定义思考等级
-- **斜杠命令** — 支持 `/help`、`/clear`、`/compact`、`/model`、`/config`、`/bash`、`/file` 等命令
+- **斜杠命令** — 支持 `/help`、`/clear`、`/compact`、`/model`、`/config` 等命令
 
 ## 功能演示
 

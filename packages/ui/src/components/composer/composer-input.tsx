@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useLayoutEffect, useEffect, KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
+import { DEFAULT_SLASH_COMMANDS } from '@pi/sdk-wrapper';
 
 interface PendingTokenInsert {
   text: string;
@@ -40,7 +41,10 @@ interface ComposerInputProps {
  * Regex matching /command and @mention tokens at word boundaries.
  * Must be kept in sync with token-parser.tsx.
  */
-const TOKEN_PATTERN = /((?:^|\s)(?:\/[a-zA-Z][\w-]*|@[^\s]+))/g;
+const TOKEN_PATTERN = /((?:^|\s)(?:\/[^\s]+|@[^\s]+))/g;
+
+/** Known slash command names — only these render as command chips. */
+const SLASH_COMMAND_NAMES = new Set(DEFAULT_SLASH_COMMANDS.map((c) => c.name));
 
 /** Convert plain text to HTML with styled token spans */
 function renderPlainTextToHTML(text: string): string {
@@ -49,6 +53,8 @@ function renderPlainTextToHTML(text: string): string {
     .map((part) => {
       const trimmed = part.trimStart();
       if (trimmed.startsWith('/') || trimmed.startsWith('@')) {
+        // Only render known slash commands as chips; unknown /words stay plain
+        if (trimmed.startsWith('/') && !SLASH_COMMAND_NAMES.has(trimmed)) return part;
         const isSlash = trimmed.startsWith('/');
         const cls = isSlash ? 'token-slash' : 'token-mention';
         const leadingSpace = part.slice(0, part.length - trimmed.length);

@@ -835,7 +835,7 @@ export function Composer() {
         return true;
       }
 
-      // /bash, /file — pass through to LLM
+      // Unknown slash commands pass through to the LLM as plain text
       return false;
     },
     [
@@ -981,6 +981,15 @@ export function Composer() {
 
   const handleSlashDetect = useCallback(
     (query: string) => {
+      // Only show menu when there are actual matches; otherwise Enter key
+      // gets intercepted for empty-menu selection and the message won't send.
+      const hasMatch = DEFAULT_SLASH_COMMANDS.some(
+        (c) => !query || c.name.toLowerCase().includes(query.toLowerCase()),
+      );
+      if (!hasMatch) {
+        setShowSlashMenu(false);
+        return;
+      }
       setHighlightedSlashIndex(0);
       setShowSlashMenu(true, query);
     },

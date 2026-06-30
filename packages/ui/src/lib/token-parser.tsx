@@ -1,18 +1,26 @@
 import React from 'react';
+import { DEFAULT_SLASH_COMMANDS } from '@pi/sdk-wrapper';
 
 /**
  * Regex to match /command and @mention tokens.
  * Only matches at word boundaries (start of string or after whitespace).
  * The capturing group includes leading whitespace so split() preserves spacing.
  */
-const TOKEN_PATTERN = /((?:^|\s)(?:\/[a-zA-Z][\w-]*|@[^\s]+))/g;
+const TOKEN_PATTERN = /((?:^|\s)(?:\/[^\s]+|@[^\s]+))/g;
+
+/** Known slash command names — only these render as command chips. */
+const SLASH_COMMAND_NAMES = new Set(DEFAULT_SLASH_COMMANDS.map((c) => c.name));
 
 /**
  * Check whether a string segment looks like a token
  * (starts with optional whitespace followed by / or @).
+ * Slash tokens must be a known command; @mentions are always recognized.
  */
 function isToken(text: string): boolean {
-  return /^(?:\s*)(?:\/[a-zA-Z][\w-]*|@[^\s]+)$/.test(text);
+  if (!/^(?:\s*)(?:\/[^\s]+|@[^\s]+)$/.test(text)) return false;
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith('/') && !SLASH_COMMAND_NAMES.has(trimmed)) return false;
+  return true;
 }
 
 /**
