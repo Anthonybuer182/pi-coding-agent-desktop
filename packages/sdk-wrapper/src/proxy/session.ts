@@ -15,12 +15,6 @@ export function createProxySessionService(transport: Transport): SessionService 
     async delete(id: string) {
       return transport.request('session.delete', { id }) as ReturnType<SessionService['delete']>;
     },
-    async archive(id: string) {
-      return transport.request('session.archive', { id }) as ReturnType<SessionService['archive']>;
-    },
-    async unarchive(id: string) {
-      return transport.request('session.unarchive', { id }) as ReturnType<SessionService['unarchive']>;
-    },
     async updateTitle(id: string, title: string) {
       return transport.request('session.updateTitle', { id, title }) as ReturnType<SessionService['updateTitle']>;
     },

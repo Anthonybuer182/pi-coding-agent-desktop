@@ -1,11 +1,10 @@
-import { MessageSquare, MoreHorizontal, Archive, Trash2 } from 'lucide-react';
+import { MessageSquare, MoreHorizontal, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { Session } from '@pi/types';
@@ -14,11 +13,10 @@ interface SessionItemProps {
   session: Session;
   isActive: boolean;
   onClick: () => void;
-  onArchive?: () => void;
   onDelete?: () => void;
 }
 
-export function SessionItem({ session, isActive, onClick, onArchive, onDelete }: SessionItemProps) {
+export function SessionItem({ session, isActive, onClick, onDelete }: SessionItemProps) {
   return (
     <div
       role="button"
@@ -52,11 +50,6 @@ export function SessionItem({ session, isActive, onClick, onArchive, onDelete }:
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
-          <DropdownMenuItem onClick={() => onArchive?.()}>
-            <Archive className="mr-2 h-4 w-4" />
-            Archive
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-destructive"
             onClick={() => onDelete?.()}

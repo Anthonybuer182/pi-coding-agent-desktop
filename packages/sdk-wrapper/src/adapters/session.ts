@@ -573,14 +573,6 @@ export function createRealSessionService(): SessionService {
       }
     },
 
-    async archive(id: string): Promise<Session> {
-      return this.get(id);
-    },
-
-    async unarchive(id: string): Promise<Session> {
-      return this.get(id);
-    },
-
     async updateTitle(id: string, title: string): Promise<Session> {
       try {
         const sm = SessionManager.open(id);

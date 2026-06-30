@@ -126,8 +126,6 @@ async function handleSession(action: string, params: unknown): Promise<unknown> 
     case 'get': return sessionService.get(p.id as string);
     case 'create': return sessionService.create(p.workspaceId as string, p.title as string | undefined);
     case 'delete': return sessionService.delete(p.id as string);
-    case 'archive': return sessionService.archive(p.id as string);
-    case 'unarchive': return sessionService.unarchive(p.id as string);
     case 'updateTitle': return sessionService.updateTitle(p.id as string, p.title as string);
     case 'getTree': return sessionService.getTree(p.id as string);
     default: throw new Error(`Unknown session action: ${action}`);

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSDK } from '@/hooks/use-sdk';
 import { useUIStore } from '@/stores/ui-store';
 import { SessionItem } from './session-item';
@@ -11,9 +11,20 @@ import { Virtuoso } from 'react-virtuoso';
 
 export function SessionList() {
   const sdk = useSDK();
+  const queryClient = useQueryClient();
   const activeWorkspaceId = useUIStore((s) => s.activeWorkspaceId);
   const activeSessionId = useUIStore((s) => s.activeSessionId);
   const setActiveSession = useUIStore((s) => s.setActiveSession);
+
+  const deleteSession = useMutation({
+    mutationFn: (id: string) => sdk.session.delete(id),
+    onSuccess: (_data, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions', activeWorkspaceId] });
+      if (deletedId === activeSessionId) {
+        setActiveSession(null);
+      }
+    },
+  });
 
   const { data: workspaces } = useQuery({
     queryKey: ['workspaces'],
@@ -57,6 +68,7 @@ export function SessionList() {
             session={session}
             isActive={session.id === activeSessionId}
             onClick={() => setActiveSession(session.id)}
+            onDelete={() => deleteSession.mutate(session.id)}
           />
         )}
       />
