@@ -37,4 +37,5 @@ pnpm-debug.log*
 .claude/
 # Bash bundle (downloaded during Windows build)
 bash-bundle/
+.mingit-tmp.zip
 MinGit*
