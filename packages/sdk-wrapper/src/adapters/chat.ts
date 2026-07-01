@@ -4,6 +4,7 @@ import type { ChatService, SendMessageParams, StreamChunk } from '../services/ch
 import type { Message, AssistantMessage, ContentBlock, TokenUsage, ContextUsageInfo, SessionStatsInfo, MessageTiming } from '@pi/types';
 import { createAgentSession, SessionManager, ModelRegistry, AuthStorage, DefaultResourceLoader, getAgentDir, SettingsManager } from '@earendil-works/pi-coding-agent';
 import type { AgentSession } from '@earendil-works/pi-coding-agent';
+import { extractThinkContent } from '../utils/think-parser.js';
 
 /**
  * Real chat adapter using createAgentSessionFromServices.
@@ -93,47 +94,8 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
     return mimeMap[ext] || 'application/octet-stream';
   }
 
-  /**
-   * Extract <think>...</think> tags from text content.
-   * Some models (Minimax, DeepSeek-R1) return thinking content as XML tags
-   * in the text stream rather than as structured reasoning_content blocks.
-   *
-   * Returns the extracted thinking content (null if none) and the text
-   * with think tags stripped.
-   *
-   * Handles streaming partials:
-   *  - Incomplete <think> (no closing tag): all content treated as thinking
-   *  - Complete <think>...</think>: thinking extracted, text cleaned
-   *  - No think tag: thinking=null, text=original
-   */
-  function extractThinkContent(text: string): { thinking: string | null; text: string } {
-    // Fast path: no opening tag at all
-    if (!text.includes('<think>')) {
-      return { thinking: null, text };
-    }
-
-    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/g;
-    let thinking = '';
-    const textParts: string[] = [];
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = thinkRegex.exec(text)) !== null) {
-      // Text before this think block
-      textParts.push(text.slice(lastIndex, match.index));
-      // Thinking content
-      thinking += (thinking ? '\n' : '') + match[1];
-      lastIndex = match.index + match[0].length;
-    }
-    // Remaining text after last think block
-    textParts.push(text.slice(lastIndex));
-
-    const cleanText = textParts.join('').trim();
-    return {
-      thinking: thinking.trim() || null,
-      text: cleanText,
-    };
-  }
+  // extractThinkContent is imported from ../utils/think-parser.js
+  // so the streaming adapter and the session loader share one implementation.
 
   /** Detect file paths written by tools, returning existing files with stats */
   function detectWrittenFiles(

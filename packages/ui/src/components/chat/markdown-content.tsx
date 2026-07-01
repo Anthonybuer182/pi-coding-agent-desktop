@@ -103,7 +103,7 @@ export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) 
         rehypePlugins={[rehypeHighlight]}
         components={{
           pre: ({ children }) => <>{children}</>,
-          code: ({ className, children, ...props }) => {
+          code: ({ className, children, node: _node, ...props }) => {
             const match = /language-/.exec(className || '');
             const isInline = !match;
             const codeContent = children as React.ReactNode;
@@ -135,7 +135,7 @@ export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) 
               </CodeBlock>
             );
           },
-          p: ({ children, ...props }) => {
+          p: ({ children, node: _node, ...props }) => {
             const text = extractText(children);
             const hasToken = /(?:^|\s)(?:\/[a-zA-Z][\w-]*|@[\w][\w-]*)/.test(text);
             if (hasToken) {
@@ -143,7 +143,7 @@ export function MarkdownContent({ content, isStreaming }: MarkdownContentProps) 
             }
             return <p {...props}>{children}</p>;
           },
-          a: ({ children, href, ...props }) => (
+          a: ({ children, href, node: _node, ...props }) => (
             <a
               href={href}
               target="_blank"

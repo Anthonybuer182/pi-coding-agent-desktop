@@ -8,6 +8,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { existsSync, unlinkSync, statSync } from 'fs';
 import * as path from 'path';
+import { extractThinkContent } from '../utils/think-parser.js';
 
 function extractTitleFromMessage(msg: any): string | undefined {
   const content = msg.content;
@@ -121,24 +122,102 @@ function detectFilesFromResult(
 // === Conversion: AgentMessage → ContentBlock[] ===
 type AgentMessage = SessionMessageEntry['message'];
 
-function agentMessageToBlocks(msg: any): ContentBlock[] {
+/**
+ * Strip the attachment sections that the composer appends to the prompt before
+ * sending, so the displayed user content matches what the user actually typed.
+ * Also reconstructs lightweight file blocks (fileName only, no base64 data) so
+ * the file preview renders consistently on reload.
+ *
+ * Composer appends two kinds of sections:
+ *  - Text files:   `File: <name>\n```<ext>\n...\n````\n`
+ *  - Binary/error: `[Attached: <name> (<type>)]` or `[Attached: <name> (<type>) - could not decode]`
+ */
+function stripAttachmentSections(text: string, cwd?: string): { content: string; files: Array<{ fileName: string; fileSize?: number; workspacePath?: string }> } {
+  const files: Array<{ fileName: string; fileSize?: number; workspacePath?: string }> = [];
+  let content = text;
+
+  const recordFile = (name: string) => {
+    const fileName = String(name).trim();
+    const entry: { fileName: string; fileSize?: number; workspacePath?: string } = { fileName };
+    // Try to resolve the file on disk relative to cwd
+    if (cwd) {
+      const candidate = path.resolve(cwd, fileName);
+      try {
+        if (existsSync(candidate)) {
+          const stat = statSync(candidate);
+          if (stat.isFile()) {
+            entry.fileSize = stat.size;
+            entry.workspacePath = candidate;
+          }
+        }
+      } catch { /* file may not exist or not be accessible */ }
+    }
+    files.push(entry);
+  };
+
+  // Text-file sections: `File: <name>\n```...``` `
+  content = content.replace(
+    /\n*File:\s*(.+?)\n```[\w]*\n[\s\S]*?```/g,
+    (_m, name) => {
+      recordFile(name);
+      return '';
+    },
+  );
+
+  // Binary/error placeholders: `[Attached: <name> (<type>)]`
+  content = content.replace(
+    /\n*\[Attached:\s*(.+?)\s*\([^)]*\)(?:\s*-\s*could not decode)?\]/g,
+    (_m, name) => {
+      recordFile(name);
+      return '';
+    },
+  );
+
+  return { content: content.trim(), files };
+}
+
+function agentMessageToBlocks(msg: any, cwd?: string): ContentBlock[] {
   const blocks: ContentBlock[] = [];
 
   if (msg.role === 'user') {
     if (typeof msg.content === 'string') {
+      const { content, files } = stripAttachmentSections(msg.content, cwd);
       blocks.push({
         id: `b-${msg.timestamp || Date.now()}`,
         type: 'text',
-        content: msg.content,
+        content,
       });
+      for (const f of files) {
+        blocks.push({
+          id: `b-file-${msg.timestamp || Date.now()}-${f.fileName}`,
+          type: 'file',
+          content: f.fileName,
+          mimeType: getMimeTypeFromPath(f.fileName),
+          fileName: f.fileName,
+          fileSize: f.fileSize,
+          workspacePath: f.workspacePath,
+        });
+      }
     } else if (Array.isArray(msg.content)) {
       for (const c of msg.content as any[]) {
         if (c.type === 'text') {
+          const { content, files } = stripAttachmentSections(c.text || '', cwd);
           blocks.push({
             id: `b-text-${msg.timestamp || Date.now()}-${blocks.length}`,
             type: 'text',
-            content: c.text || '',
+            content,
           });
+          for (const f of files) {
+            blocks.push({
+              id: `b-file-${msg.timestamp || Date.now()}-${f.fileName}`,
+              type: 'file',
+              content: f.fileName,
+              mimeType: getMimeTypeFromPath(f.fileName),
+              fileName: f.fileName,
+              fileSize: f.fileSize,
+              workspacePath: f.workspacePath,
+            });
+          }
         } else if (c.type === 'image') {
           blocks.push({
             id: `b-img-${msg.timestamp || Date.now()}-${blocks.length}`,
@@ -156,10 +235,20 @@ function agentMessageToBlocks(msg: any): ContentBlock[] {
       for (let i = 0; i < content.length; i++) {
         const block = content[i] as any;
         if (block.type === 'text') {
+          const rawText = block.text || '';
+          const thinkResult = extractThinkContent(rawText);
+          if (thinkResult.thinking !== null) {
+            blocks.push({
+              id: `b-think-${msg.timestamp || Date.now()}-${i}`,
+              type: 'thinking',
+              content: thinkResult.thinking,
+              thinking: thinkResult.thinking,
+            });
+          }
           blocks.push({
             id: `b-text-${msg.timestamp || Date.now()}-${i}`,
             type: 'text',
-            content: block.text || '',
+            content: thinkResult.text,
           });
         } else if (block.type === 'toolCall' || block.type === 'tool_call') {
           // pi-ai uses `arguments` (not `args` or `input`) and `id` (not `toolCallId`)
@@ -256,12 +345,12 @@ function agentMessageToBlocks(msg: any): ContentBlock[] {
 }
 
 // === Conversion: AgentMessage → our Message type ===
-function toMessage(msg: any, sessionId: string, index: number, entryId?: string): Message | null {
-  const blocks = agentMessageToBlocks(msg);
+function toMessage(msg: any, sessionId: string, index: number, entryId?: string, cwd?: string): Message | null {
+  const blocks = agentMessageToBlocks(msg, cwd);
   if (blocks.length === 0) return null;
 
   const id = `msg-${sessionId}-${index}`;
-  const content = blocks.map((b) => b.content).join('\n\n');
+  const content = blocks.filter((b) => b.type === 'text').map((b) => b.content).join('');
   const timestamp = msg.timestamp
     ? new Date(msg.timestamp).toISOString()
     : new Date().toISOString();
@@ -464,6 +553,9 @@ export function createRealSessionService(): SessionService {
       const entries = sm.getEntries();
       const messageEntries = entries.filter(isSessionMessageEntry);
 
+      // Resolve cwd early so it's available during message block construction
+      const cwd = header?.cwd || sm.getCwd();
+
       // Build messages, merging tool_result entries into their preceding assistant message.
       // This ensures the renderBlocks pairing in message-bubble.tsx can correctly
       // pair tool_call blocks with their results within a single message.
@@ -477,7 +569,7 @@ export function createRealSessionService(): SessionService {
         if (rawMsg.role === 'toolResult') {
           const lastMsg = messages[messages.length - 1];
           if (lastMsg && lastMsg.role === 'assistant') {
-            const toolBlocks = agentMessageToBlocks(rawMsg);
+            const toolBlocks = agentMessageToBlocks(rawMsg, cwd);
             if (toolBlocks.length > 0) {
               lastMsg.blocks.push(...toolBlocks);
               lastMsg.content += '\n' + (toolBlocks[0]?.content || '');
@@ -491,7 +583,7 @@ export function createRealSessionService(): SessionService {
           continue;
         }
 
-        const message = toMessage(rawMsg, id, msgIndex++, entry.id);
+        const message = toMessage(rawMsg, id, msgIndex++, entry.id, cwd);
         if (message) messages.push(message);
       }
 
@@ -499,7 +591,6 @@ export function createRealSessionService(): SessionService {
       // deduplicate globally, then append them to the LAST message only.
       // This matches the streaming behaviour where all file blocks appear at the
       // very end of the assistant response, never interleaved mid-conversation.
-      const cwd = header?.cwd || sm.getCwd();
       const allFileBlocks: ContentBlock[] = [];
       const seenPaths = new Set<string>();
       for (const message of messages) {

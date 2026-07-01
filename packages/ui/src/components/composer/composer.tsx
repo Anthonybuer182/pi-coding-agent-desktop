@@ -13,6 +13,7 @@ import { SendButton } from './send-button';
 import { FileUploadButton } from './file-upload-button';
 import { SlashCommandMenu } from './slash-command-menu';
 import { MentionMenu } from './mention-menu';
+import { SlashCommandDialog, type SlashCommandDialogData } from './slash-command-dialog';
 import type { MentionItem } from './mention-menu';
 import { AttachmentPreviewBar } from './attachment-preview-bar';
 import { QueueIndicator } from './queue-indicator';
@@ -90,6 +91,7 @@ export function Composer() {
   // Causes the proxy to return a dummy message (not throw), so onSuccess
   // fires instead of onError, preserving the user message in the chat.
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [commandDialog, setCommandDialog] = useState<SlashCommandDialogData | null>(null);
 
   // Config for model/think level
   const { data: config } = useQuery({
@@ -323,13 +325,18 @@ export function Composer() {
               mimeType: att.mimeType,
               data: att.data,
             });
-          } else if (att.data) {
+          } else {
+            // Always create file block for non-image attachments (or
+            // images without loaded data), even before base64 data
+            // finishes loading. This matches the reload path
+            // (stripAttachmentSections) which creates file blocks purely
+            // from the [Attached: ...] placeholder text.
             userBlocks.push({
               id: `b-file-opt-${att.id}`,
               type: 'file',
               content: att.name,
               mimeType: att.mimeType,
-              data: att.data,
+              data: att.data || undefined,
               fileName: att.name,
               fileSize: att.size,
             });
@@ -475,10 +482,10 @@ export function Composer() {
         promptContent = `${content}\n\n${fileSections.join('\n\n')}`;
       }
 
-      // Strip @ prefix from file references (e.g. @filename.pptx → filename.pptx)
-      // so the agent resolves actual filesystem paths. Only matches tokens with
-      // a file extension to avoid affecting workspace/session @mentions.
-      promptContent = promptContent.replace(/@([^\s]*?\.[a-zA-Z0-9]{1,10})(?=[^a-zA-Z0-9]|$)/g, '$1');
+      // Note: the @ prefix on file mentions (e.g. @filename.pptx) is intentionally
+      // preserved so that the persisted content keeps the @ and the mention badge
+      // renders identically on reload. Workspace/session @mentions already keep @;
+      // file mentions now match for consistency.
 
       // Collect image attachments with base64 data read
       const imageAttachments = currentAttachments
@@ -670,71 +677,42 @@ export function Composer() {
       if (!knownCommands.has(cmdName)) return false;
 
       const now = new Date().toISOString();
-      const insertPair = (assistantMsg: Record<string, unknown>) => {
-        const userMsg = {
-          id: `user-${Date.now()}`,
-          sessionId: activeSessionId,
-          role: 'user' as const,
-          status: 'complete' as const,
-          content: trimmed,
-          blocks: [],
-          createdAt: now,
-          updatedAt: now,
-        };
-        queryClient.setQueryData(['session', activeSessionId], (old: any) => {
-          if (!old) return old;
-          return {
-            ...old,
-            messages: [...(old.messages || []), userMsg, assistantMsg],
-          };
-        });
-        triggerScrollToBottom();
-      };
 
       if (cmdName === '/help') {
-        const helpContent = [
-          '# Pi Coding Agent',
-          '',
-          'I\'m your AI coding assistant. Here\'s what I can do:',
-          '',
-          '## Available Commands',
-          ...DEFAULT_SLASH_COMMANDS.map((c) => `- **${c.name}** — ${c.description}`),
-          '',
-          '## Skills',
-          ...(availableSkills ?? []).map((s) =>
-            `- **${s.name}** — ${s.description} (${validSelectedSkills.includes(s.id) ? 'enabled' : 'disabled'})`,
-          ),
-          '',
-          '## Keyboard Shortcuts',
-          '- **Enter** — Send message',
-          '- **Shift+Enter** — New line',
-          '- **Ctrl+Enter** — Steer agent during streaming',
-          "- **/** — Open command menu for quick actions",
-          '- **@** — Mention files, workspaces, or sessions',
-          '',
-          '## Capabilities',
-          '- Read, write, and edit files in your workspace',
-          '- Execute shell commands via bash tool',
-          '- Search codebases with regex and glob patterns',
-          '- Manage multiple workspaces and sessions',
-          '- Attach images and files for AI analysis',
-          '- Stream responses with live progress updates',
-          '- Create and edit Office documents (.docx, .xlsx, .pptx)',
-          '- Build knowledge graphs from code',
-          '- UI/UX design intelligence for web and mobile apps',
-        ].join('\n');
-
-        insertPair({
-          id: `help-${Date.now()}`,
-          sessionId: activeSessionId,
-          role: 'assistant',
-          status: 'complete',
-          modelId: config?.defaultModelId ?? 'system',
-          content: helpContent,
-          blocks: [],
-          createdAt: now,
-          updatedAt: now,
-        });
+        const helpSections: Array<{ title: string; items: Array<{ name: string; desc: string }> }> = [
+          {
+            title: 'Available Commands',
+            items: DEFAULT_SLASH_COMMANDS.map((c) => ({ name: c.name, desc: c.description })),
+          },
+          {
+            title: 'Skills',
+            items: (availableSkills ?? []).map((s) => ({
+              name: s.name,
+              desc: `${s.description} (${validSelectedSkills.includes(s.id) ? 'enabled' : 'disabled'})`,
+            })),
+          },
+          {
+            title: 'Keyboard Shortcuts',
+            items: [
+              { name: 'Enter', desc: 'Send message' },
+              { name: 'Shift+Enter', desc: 'New line' },
+              { name: 'Ctrl+Enter', desc: 'Steer agent during streaming' },
+              { name: '/', desc: 'Open command menu for quick actions' },
+              { name: '@', desc: 'Mention files, workspaces, or sessions' },
+            ],
+          },
+          {
+            title: 'Capabilities',
+            items: [
+              { name: 'Files', desc: 'Read, write, and edit files in your workspace' },
+              { name: 'Shell', desc: 'Execute shell commands via bash tool' },
+              { name: 'Search', desc: 'Search codebases with regex and glob patterns' },
+              { name: 'Office', desc: 'Create and edit Office documents (.docx, .xlsx, .pptx)' },
+              { name: 'Attach', desc: 'Attach images and files for AI analysis' },
+            ],
+          },
+        ];
+        setCommandDialog({ title: 'Pi Coding Agent', subtitle: 'Your AI coding assistant', sections: helpSections });
         return true;
       }
 
@@ -754,55 +732,39 @@ export function Composer() {
           .filter((s) => validSelectedSkills.includes(s.id))
           .map((s) => s.name)
           .join(', ') || 'none';
-        const configContent = [
-          '## Current Configuration',
-          '',
-          `- **Model**: ${config?.defaultModelId ?? 'Not set'}`,
-          `- **Think Level**: ${config?.defaultThinkLevel ?? 'medium'}`,
-          `- **Skills**: ${skills}`,
-          `- **Compact Mode**: ${compactMode ? 'On' : 'Off'}`,
-          `- **Workspace**: ${activeWorkspaceId ?? 'None'}`,
-        ].join('\n');
-
-        insertPair({
-          id: `config-${Date.now()}`,
-          sessionId: activeSessionId,
-          role: 'assistant',
-          status: 'complete',
-          modelId: config?.defaultModelId ?? 'system',
-          content: configContent,
-          blocks: [],
-          createdAt: now,
-          updatedAt: now,
-        });
+        const configSections: Array<{ title: string; items: Array<{ name: string; desc: string }> }> = [
+          {
+            title: 'Current Configuration',
+            items: [
+              { name: 'Model', desc: config?.defaultModelId ?? 'Not set' },
+              { name: 'Think Level', desc: config?.defaultThinkLevel ?? 'medium' },
+              { name: 'Skills', desc: skills },
+              { name: 'Compact Mode', desc: compactMode ? 'On' : 'Off' },
+              { name: 'Workspace', desc: activeWorkspaceId ?? 'None' },
+            ],
+          },
+        ];
+        setCommandDialog({ title: 'Configuration', subtitle: 'Current session settings', sections: configSections });
         return true;
       }
 
       if (cmdName === '/model') {
         const currentModelId = config?.defaultModelId ?? 'Not set';
-        const modelLines = ['## Available Models', ''];
+        const modelItems: Array<{ name: string; desc: string }> = [];
         if (availableModels && availableModels.length > 0) {
           for (const m of availableModels) {
             const marker = m.id === currentModelId ? ' (current)' : '';
             const status = m.isAvailable ? '' : ' [unavailable]';
-            modelLines.push(`- **${m.name}**${marker}${status}`);
+            modelItems.push({ name: m.name, desc: `${marker}${status}`.trim() });
           }
         } else {
-          modelLines.push('_(loading models...)_');
+          modelItems.push({ name: 'loading', desc: 'loading models...' });
         }
-        modelLines.push('', `Current: **${currentModelId}**`);
-
-        insertPair({
-          id: `model-${Date.now()}`,
-          sessionId: activeSessionId,
-          role: 'assistant',
-          status: 'complete',
-          modelId: config?.defaultModelId ?? 'system',
-          content: modelLines.join('\n'),
-          blocks: [],
-          createdAt: now,
-          updatedAt: now,
-        });
+        const modelSections: Array<{ title: string; items: Array<{ name: string; desc: string }> }> = [
+          { title: 'Available Models', items: modelItems },
+          { title: 'Current', items: [{ name: currentModelId, desc: '' }] },
+        ];
+        setCommandDialog({ title: 'Models', subtitle: 'Available models', sections: modelSections });
         return true;
       }
 
@@ -1256,6 +1218,9 @@ export function Composer() {
         )}
         </div>
       </div>
+
+      {/* Slash command dialog (/help, /config, /model) */}
+      <SlashCommandDialog data={commandDialog} onClose={() => setCommandDialog(null)} />
     </div>
   );
 }
