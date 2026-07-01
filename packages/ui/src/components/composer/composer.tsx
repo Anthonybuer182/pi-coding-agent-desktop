@@ -1201,12 +1201,12 @@ export function Composer() {
       <Separator className="mt-3" />
 
       {/* Bottom tools row */}
-      <div className="flex items-center gap-1 px-3 py-2">
+      <div className="flex items-center gap-1 px-3 py-2 min-w-0 flex-wrap">
         <FileUploadButton
           disabled={isStreaming}
           onFilesSelected={handleFilesSelected}
         />
-        <div className="h-4 w-px bg-border mx-1" />
+        <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
         <ModelSelector
           value={config?.defaultModelId ?? ''}
           onChange={(modelId) => updateConfigMut.mutate({ defaultModelId: modelId })}
@@ -1215,14 +1215,14 @@ export function Composer() {
           value={config?.defaultThinkLevel ?? 'medium'}
           onChange={(level) => updateConfigMut.mutate({ defaultThinkLevel: level })}
         />
-        <div className="h-4 w-px bg-border mx-1" />
+        <div className="h-4 w-px bg-border mx-1 hidden sm:block" />
         <SkillSelector
           skills={availableSkills ?? []}
           selectedIds={validSelectedSkills}
           onToggle={toggleSkill}
         />
         <CompactToggle compact={compactMode} onToggle={setCompactMode} />
-        <div className="flex-1" />
+        <div className="flex items-center gap-1 shrink-0 ml-auto">
         {isStreaming ? (
           <>
             <Button
@@ -1254,6 +1254,7 @@ export function Composer() {
             isLoading={sendMutation.isPending}
           />
         )}
+        </div>
       </div>
     </div>
   );

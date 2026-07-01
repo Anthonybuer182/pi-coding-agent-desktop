@@ -26,7 +26,7 @@ export function ThinkLevelSelector({ value, onChange, supportedLevels }: ThinkLe
 
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-8 w-[100px] border-0 bg-transparent hover:bg-accent text-xs" aria-label="Thinking level">
+      <SelectTrigger className="h-8 min-w-[72px] w-[84px] sm:w-[100px] shrink min-w-0 border-0 bg-transparent hover:bg-accent text-xs" aria-label="Thinking level">
         <Brain className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
         <SelectValue placeholder="Think" />
       </SelectTrigger>

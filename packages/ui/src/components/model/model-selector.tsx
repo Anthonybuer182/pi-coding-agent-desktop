@@ -27,7 +27,7 @@ export function ModelSelector({ value, onChange }: ModelSelectorProps) {
 
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="h-8 w-[180px] border-0 bg-transparent hover:bg-accent text-xs" aria-label="Select model">
+      <SelectTrigger className="h-8 min-w-[120px] w-[140px] sm:w-[180px] max-w-[220px] shrink min-w-0 border-0 bg-transparent hover:bg-accent text-xs" aria-label="Select model">
         <Cpu className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
         <SelectValue placeholder="Select model" />
       </SelectTrigger>
