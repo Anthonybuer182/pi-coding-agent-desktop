@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Download MinGit + BusyBox for bundling with the Windows installer.
+ * Download MinGit for bundling with the Windows installer.
  *
- * MinGit BusyBox provides ash.exe (BusyBox POSIX shell), git.exe, and BusyBox
- * coreutils (ls, cat, grep, sed, awk, find, mkdir, rm, etc.) in a 33.7 MB zip
- * (~84 MB extracted). The bundle is placed in bash-bundle/ and included as
+ * Standard MinGit provides bash.exe (GNU Bash 4.x), git.exe, and GNU coreutils
+ * (ls, cat, grep, sed, awk, find, mkdir, rm, etc.) in a ~50 MB zip
+ * (~250 MB extracted). The bundle is placed in bash-bundle/ and included as
  * extraResources in the Windows NSIS installer.
  *
  * Caching:
@@ -246,7 +246,7 @@ async function main() {
 
   // ── Find asset ──
   const cleanVersion = tag.replace(/^v/, '').replace(/\.windows\.\d+$/, '');
-  const assetName = `MinGit-${cleanVersion}-busybox-64-bit.zip`;
+  const assetName = `MinGit-${cleanVersion}-64-bit.zip`;
   const asset = assets.find((a) => a.name === assetName);
 
   if (!asset) {

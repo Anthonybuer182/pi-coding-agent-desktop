@@ -105,13 +105,14 @@ app.on('window-all-closed', () => {
 });
 
 /**
- * On Windows, detect the bundled MinGit BusyBox environment (shipped as
+ * On Windows, detect the bundled MinGit environment (shipped as
  * extraResources) and configure SettingsManager to use it.
  *
- * MinGit BusyBox provides:
- *   - ash.exe (BusyBox POSIX shell)      → set as shellPath
- *   - busybox.exe (coreutils: ls, cat…)  → added to PATH
+ * Standard MinGit provides:
+ *   - bash.exe (GNU Bash 4.x)             → set as shellPath (preferred)
+ *   - ash.exe (BusyBox POSIX shell)       → fallback if bash.exe is missing
  *   - git.exe                            → added to PATH
+ *   - GNU coreutils (ls, cat…)           → added to PATH
  *
  * This is a no-op on macOS and Linux, where the OS ships a shell natively.
  */
@@ -122,9 +123,8 @@ function injectBundledShell(settingsManager: SettingsManager): void {
   // The bundled shell is at resources/bash-bundle/ (from extraResources).
   const bundleRoot = join(process.resourcesPath, 'bash-bundle');
 
-  // MinGit BusyBox doesn't include bash.exe — it has ash.exe (BusyBox
-  // Almquist shell) which supports POSIX shell syntax with "-c" flag.
-  // Search for bash.exe first (preferred), then ash.exe.
+  // Standard MinGit ships bash.exe in mingw64/bin/. BusyBox-only builds only
+  // have ash.exe — keep it as a fallback (POSIX sh, limited but functional).
   const shellNames = ['bash.exe', 'ash.exe'];
   const binDirs = ['mingw64/bin', 'bin', 'usr/bin'].map((d) => join(bundleRoot, d));
 
@@ -138,14 +138,23 @@ function injectBundledShell(settingsManager: SettingsManager): void {
   }
 
   if (!shellPath) {
+    console.warn('[bash-bundle] No bundled shell found. Falling back to system Git Bash search.');
     // Bundled shell not found. SDK will fall back to searching for Git
     // Bash on the system, then show a clear error if nothing is found.
     return;
   }
 
+  // Integrity check: warn (but proceed) if git.exe is missing — the agent
+  // can still run bash commands, but git operations will fail.
+  const gitExe = join(bundleRoot, 'mingw64', 'bin', 'git.exe');
+  if (!existsSync(gitExe)) {
+    console.warn(`[bash-bundle] git.exe not found at ${gitExe}. Git operations may fail.`);
+  }
+
+  console.log(`[bash-bundle] Using shell: ${shellPath}`);
   settingsManager.setShellPath(shellPath);
 
-  // Add bundled bin dirs to PATH so git, busybox utilities, and msys-2.0.dll
+  // Add bundled bin dirs to PATH so git, coreutils, and msys-2.0.dll
   // can be found. On MSYS2, Windows paths are mapped as:
   //   C:\foo\bar → /c/foo/bar
   const pathDirs = [
