@@ -1,4 +1,4 @@
-import type { Session, SessionWithMessages, Message, ContentBlock, AssistantMessage, SessionTreeNode, SessionTreeResult, TreeNodeToolCall } from '@pi/types';
+import type { Session, SessionWithMessages, Message, ContentBlock, AssistantMessage, SessionTreeNode, SessionTreeResult, TreeNodeToolCall, ToolCallBlock, ToolResultBlock } from '@pi/types';
 import type { SessionService } from '../services/session.js';
 import {
   SessionManager,
@@ -9,6 +9,7 @@ import {
 import { existsSync, unlinkSync, statSync } from 'fs';
 import * as path from 'path';
 import { extractThinkContent } from '../utils/think-parser.js';
+import { detectWrittenFiles, getMimeType } from '../utils/file-detection.js';
 
 function extractTitleFromMessage(msg: any): string | undefined {
   const content = msg.content;
@@ -53,70 +54,6 @@ function extractTextFromContent(content: unknown): string {
       .join('\n');
   }
   return JSON.stringify(content);
-}
-
-/** Map file extension to MIME type */
-function getMimeTypeFromPath(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  const mimeMap: Record<string, string> = {
-    '.txt': 'text/plain',
-    '.md': 'text/markdown',
-    '.html': 'text/html',
-    '.htm': 'text/html',
-    '.css': 'text/css',
-    '.js': 'application/javascript',
-    '.ts': 'application/typescript',
-    '.json': 'application/json',
-    '.csv': 'text/csv',
-    '.xml': 'application/xml',
-    '.yaml': 'application/x-yaml',
-    '.yml': 'application/x-yaml',
-    '.pdf': 'application/pdf',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-    '.zip': 'application/zip',
-  };
-  return mimeMap[ext] || 'application/octet-stream';
-}
-
-/** Detect files written by tools from result text and cwd */
-function detectFilesFromResult(
-  resultText: string,
-  cwd: string,
-): Array<{ absPath: string; size: number; mimeType: string }> {
-  const files: Array<{ absPath: string; size: number; mimeType: string }> = [];
-  if (!resultText || !cwd) return files;
-
-  // Only match paths with explicit file-creation context (not any whitespace)
-  // to avoid picking up filenames from ls output, build logs, or error messages.
-  // Uses the 'u' flag for Unicode filename support (Chinese, etc.).
-  const creationPrefix = '(?:^|created[:,]?\\s+|created\\s+at\\s+|saved\\s+(?:to\\s+)?|written\\s+(?:to\\s+)?|generated[:,]?\\s+|wrote[:,]?\\s+|exported[:,]?\\s+|:\\s*|已生成\\S*\\s*[：:]\\s*|生成\\S*\\s*[：:]\\s*)';
-  const pathPart = '[\\p{L}\\w\\-./]+\\.\\w{2,6}|\\/[\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}|[A-Za-z]:[/\\\\][\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}';
-  const pathPattern = new RegExp(`(?<=${creationPrefix})(${pathPart})\\b`, 'giu');
-  let match;
-  while ((match = pathPattern.exec(resultText)) !== null) {
-    const raw = match[1].trim();
-    // Resolve relative paths against cwd, keep absolute paths as-is
-    const candidate = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
-    if (!candidate.startsWith(cwd)) continue;
-    if (!existsSync(candidate)) continue;
-    try {
-      const stat = statSync(candidate);
-      if (!stat.isFile()) continue;
-      if (files.some((f) => f.absPath === candidate)) continue;
-      files.push({ absPath: candidate, size: stat.size, mimeType: getMimeTypeFromPath(candidate) });
-    } catch {
-      // File may have been deleted between existsSync and statSync
-      continue;
-    }
-  }
-  return files;
 }
 
 // === Conversion: AgentMessage → ContentBlock[] ===
@@ -192,7 +129,7 @@ function agentMessageToBlocks(msg: any, cwd?: string): ContentBlock[] {
           id: `b-file-${msg.timestamp || Date.now()}-${f.fileName}`,
           type: 'file',
           content: f.fileName,
-          mimeType: getMimeTypeFromPath(f.fileName),
+          mimeType: getMimeType(f.fileName),
           fileName: f.fileName,
           fileSize: f.fileSize,
           workspacePath: f.workspacePath,
@@ -212,7 +149,7 @@ function agentMessageToBlocks(msg: any, cwd?: string): ContentBlock[] {
               id: `b-file-${msg.timestamp || Date.now()}-${f.fileName}`,
               type: 'file',
               content: f.fileName,
-              mimeType: getMimeTypeFromPath(f.fileName),
+              mimeType: getMimeType(f.fileName),
               fileName: f.fileName,
               fileSize: f.fileSize,
               workspacePath: f.workspacePath,
@@ -611,12 +548,31 @@ export function createRealSessionService(): SessionService {
       // deduplicate globally, then append them to the LAST message only.
       // This matches the streaming behaviour where all file blocks appear at the
       // very end of the assistant response, never interleaved mid-conversation.
+      //
+      // Build a toolCallId → {toolName, args} map so we can use the same precise
+      // detection logic as the streaming path (detectWrittenFiles), instead of
+      // falling back to regex-only detection that causes false positives.
+      const toolCallMap = new Map<string, { toolName: string; args: Record<string, unknown> }>();
+      for (const message of messages) {
+        for (const block of message.blocks) {
+          if (block.type === 'tool_call') {
+            const tcBlock = block as ToolCallBlock;
+            toolCallMap.set(tcBlock.toolCallId, {
+              toolName: tcBlock.toolName || '',
+              args: tcBlock.args || {},
+            });
+          }
+        }
+      }
+
       const allFileBlocks: ContentBlock[] = [];
       const seenPaths = new Set<string>();
       for (const message of messages) {
         for (const block of message.blocks) {
           if (block.type === 'tool_result' && block.result) {
-            const files = detectFilesFromResult(block.result, cwd);
+            const trBlock = block as ToolResultBlock;
+            const tcInfo = toolCallMap.get(trBlock.toolCallId);
+            const files = detectWrittenFiles(tcInfo?.toolName, tcInfo?.args, block.result, cwd);
             for (const file of files) {
               if (seenPaths.has(file.absPath)) continue;
               seenPaths.add(file.absPath);

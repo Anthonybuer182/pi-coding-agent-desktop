@@ -262,62 +262,6 @@ function extractTextFromContent(content) {
   }
   return JSON.stringify(content);
 }
-function getMimeTypeFromPath(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  const mimeMap = {
-    ".txt": "text/plain",
-    ".md": "text/markdown",
-    ".html": "text/html",
-    ".htm": "text/html",
-    ".css": "text/css",
-    ".js": "application/javascript",
-    ".ts": "application/typescript",
-    ".json": "application/json",
-    ".csv": "text/csv",
-    ".xml": "application/xml",
-    ".yaml": "application/x-yaml",
-    ".yml": "application/x-yaml",
-    ".pdf": "application/pdf",
-    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".svg": "image/svg+xml",
-    ".zip": "application/zip"
-  };
-  return mimeMap[ext] || "application/octet-stream";
-}
-function detectFilesFromResult(resultText, cwd) {
-  const files2 = [];
-  if (!resultText || !cwd)
-    return files2;
-  const creationPrefix = "(?:^|created[:,]?\\s+|created\\s+at\\s+|saved\\s+(?:to\\s+)?|written\\s+(?:to\\s+)?|generated[:,]?\\s+|wrote[:,]?\\s+|exported[:,]?\\s+|:\\s*|已生成\\S*\\s*[：:]\\s*|生成\\S*\\s*[：:]\\s*)";
-  const pathPart = "[\\p{L}\\w\\-./]+\\.\\w{2,6}|\\/[\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}";
-  const pathPattern = new RegExp(`(?<=${creationPrefix})(${pathPart})\\b`, "giu");
-  let match;
-  while ((match = pathPattern.exec(resultText)) !== null) {
-    const raw = match[1].trim();
-    const candidate = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
-    if (!candidate.startsWith(cwd))
-      continue;
-    if (!existsSync(candidate))
-      continue;
-    try {
-      const stat = statSync(candidate);
-      if (!stat.isFile())
-        continue;
-      if (files2.some((f) => f.absPath === candidate))
-        continue;
-      files2.push({ absPath: candidate, size: stat.size, mimeType: getMimeTypeFromPath(candidate) });
-    } catch {
-      continue;
-    }
-  }
-  return files2;
-}
 function agentMessageToBlocks(msg2) {
   const blocks = [];
   if (msg2.role === "user") {
@@ -648,12 +592,24 @@ function createRealSessionService() {
           messages2.push(message);
       }
       const cwd = header?.cwd || sm.getCwd();
+      const toolCallMap = /* @__PURE__ */ new Map();
+      for (const message of messages2) {
+        for (const block of message.blocks) {
+          if (block.type === "tool_call") {
+            toolCallMap.set(block.toolCallId, {
+              toolName: block.toolName || "",
+              args: block.args || {}
+            });
+          }
+        }
+      }
       const allFileBlocks = [];
       const seenPaths = /* @__PURE__ */ new Set();
       for (const message of messages2) {
         for (const block of message.blocks) {
           if (block.type === "tool_result" && block.result) {
-            const files2 = detectFilesFromResult(block.result, cwd);
+            const tcInfo = toolCallMap.get(block.toolCallId);
+            const files2 = detectWrittenFiles(tcInfo?.toolName, tcInfo?.args, block.result, cwd);
             for (const file of files2) {
               if (seenPaths.has(file.absPath))
                 continue;
@@ -861,6 +817,24 @@ function createRealChatService(cwd, modelRegistry, settingsManager) {
       "mcp__filesystem__edit_file",
       "mcp__filesystem__write_file"
     ]);
+    const READ_ONLY_TOOLS = /* @__PURE__ */ new Set([
+      "read",
+      "Read",
+      "ls",
+      "LS",
+      "glob",
+      "Glob",
+      "grep",
+      "Grep",
+      "SearchCodebase",
+      "search",
+      "stat",
+      "exists",
+      "file_info"
+    ]);
+    if (toolName && READ_ONLY_TOOLS.has(toolName)) {
+      return files2;
+    }
     if (WRITE_TOOLS.has(toolName) && args) {
       const filePath = args.path || args.filePath || args.file_path;
       if (filePath && typeof filePath === "string") {
@@ -869,7 +843,7 @@ function createRealChatService(cwd, modelRegistry, settingsManager) {
       }
     }
     if (resultText && cwd2) {
-      const creationPrefix = "(?:^|created[:,]?\\s+|created\\s+at\\s+|saved\\s+(?:to\\s+)?|written\\s+(?:to\\s+)?|generated[:,]?\\s+|wrote[:,]?\\s+|exported[:,]?\\s+|:\\s*|已生成\\S*\\s*[：:]\\s*|生成\\S*\\s*[：:]\\s*)";
+      const creationPrefix = "(?:created[:,]?\\s+|created\\s+at\\s+|saved\\s+(?:to[:,]?\\s+)?|written\\s+(?:to[:,]?\\s+)?|generated[:,]?\\s+|wrote[:,]?\\s+|exported[:,]?\\s+|已生成\\S*\\s*[：:]\\s*|生成\\S*\\s*[：:]\\s*)";
       const pathPart = "[\\p{L}\\w\\-./]+\\.\\w{2,6}|\\/[\\p{L}\\w\\-./\\\\ ]+\\.\\w{2,6}";
       const pathPattern = new RegExp(`(?<=${creationPrefix})(${pathPart})\\b`, "giu");
       let match;
