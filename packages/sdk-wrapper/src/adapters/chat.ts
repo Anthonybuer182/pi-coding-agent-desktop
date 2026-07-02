@@ -300,7 +300,7 @@ export function createRealChatService(cwd: string, modelRegistry?: ModelRegistry
                     // Only emit tool_call from message_update if it has a toolCallId.
                     // Without an ID we can't dedup against tool_execution_start blocks,
                     // which would cause duplicate empty entries.
-                    if (!block.toolCallId) break;
+                    if (!block.toolCallId) continue;
                     // block.input carries tool arguments from the SDK
                     const args = (block as any).input ?? (block as any).args;
                     // Store args for file detection in tool_execution_end
