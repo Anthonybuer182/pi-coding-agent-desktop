@@ -572,15 +572,35 @@ export function createRealSessionService(): SessionService {
             const toolBlocks = agentMessageToBlocks(rawMsg, cwd);
             if (toolBlocks.length > 0) {
               lastMsg.blocks.push(...toolBlocks);
-              lastMsg.content += '\n' + (toolBlocks[0]?.content || '');
-              // Update timestamp to reflect the tool result's time
+              // Rebuild content from text blocks only (matches streaming path)
+              lastMsg.content = lastMsg.blocks
+                .filter((b) => b.type === 'text')
+                .map((b) => b.content)
+                .join('');
               if (rawMsg.timestamp) {
-                const ts = new Date(rawMsg.timestamp).toISOString();
-                lastMsg.updatedAt = ts;
+                lastMsg.updatedAt = new Date(rawMsg.timestamp).toISOString();
               }
             }
           }
           continue;
+        }
+
+        // Merge consecutive assistant entries into one message
+        // (SDK persists multi-turn assistant responses as separate entries)
+        if (rawMsg.role === 'assistant') {
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role === 'assistant') {
+            const newBlocks = agentMessageToBlocks(rawMsg, cwd);
+            lastMsg.blocks.push(...newBlocks);
+            lastMsg.content = lastMsg.blocks
+              .filter((b) => b.type === 'text')
+              .map((b) => b.content)
+              .join('');
+            if (rawMsg.timestamp) {
+              lastMsg.updatedAt = new Date(rawMsg.timestamp).toISOString();
+            }
+            continue;
+          }
         }
 
         const message = toMessage(rawMsg, id, msgIndex++, entry.id, cwd);
